@@ -116,6 +116,36 @@ lowest slice (feet end), all starting at 0. Upload the folder to Colab or Drive 
 
 ---
 
+## Web app: upload a CT scan and analyse a nodule
+
+A local web page where you upload a chest CT, click on a nodule, and get the
+5-model malignancy estimate, each model's vote, and axial/coronal/sagittal views
+of what the model saw. It runs on your PC with the trained models in `runsaseline`.
+
+**Start it:** double-click **`run_app.bat`** in the CADC folder. The browser opens
+at http://127.0.0.1:8000 (keep the black window open while using it).
+
+**Use it:**
+1. Drop a **.zip of a DICOM CT series** (or select all its `.dcm` files), or click
+   **Try a sample scan** to load LIDC-IDRI-0001.
+2. Scroll through the slices (mouse wheel, slider, or arrow keys), find the nodule
+   where it looks largest, and **click its centre**.
+3. Click **Analyse nodule** (or press Enter).
+
+For LIDC-IDRI scans, the nodules the radiologists marked are listed under the
+viewer: click one to analyse it directly. Those scans were in the training data,
+so their scores are optimistic (the app says so).
+
+The app does **not** find nodules by itself: you point to them. It is a research
+prototype, not a diagnostic tool.
+
+First-time setup on a new PC (already done on this one):
+```
+uv pip install -r requirements.txt -r requirements-app.txt
+uv pip install torch --index-url https://download.pytorch.org/whl/cu126
+```
+Options: `run_app.bat --run runs\other_run --port 8080`.
+
 ## How the evaluation works (why the numbers are honest)
 
 - **5-fold cross-validation by patient.** Patients are split into 5 groups. Each
@@ -138,6 +168,8 @@ lowest slice (feet end), all starting at 0. Upload the folder to Colab or Drive 
 | `cadc/evaluate.py` | Pools the 5 folds' predictions and reports AUC with a 95% confidence interval, accuracy, sensitivity, specificity, nodule and patient level, plus a ROC curve. |
 | `cadc/predict.py` | Averages the 5 models' scores on nodules from a shard or a new DICOM scan. |
 | `notebooks/colab_launcher.ipynb` | The Colab notebook used above. |
+| `app/server.py`, `app/static/index.html` | The web app (FastAPI backend + single-page frontend). |
+| `train_local.bat`, `run_app.bat` | One-click training and web app on Windows. |
 
 Useful options for `cadc.train`: `--epochs`, `--batch-size`, `--lr`, and
 `--min-readers 3` (keep only nodules rated by at least 3 radiologists; a common,

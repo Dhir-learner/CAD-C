@@ -1,0 +1,5 @@
+# Extra packages for the web app (app/server.py), on top of requirements.txt and torch.
+fastapi
+uvicorn[standard]
+python-multipart
+pillow

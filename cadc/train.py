@@ -105,7 +105,7 @@ def main():
     )
     val_loader = DataLoader(
         NoduleDataset(patches[va], labels[va], train=False), batch_size=args.batch_size * 2,
-        num_workers=args.workers, pin_memory=amp,
+        num_workers=args.workers, pin_memory=amp, persistent_workers=args.workers > 0,
     )
 
     model = ResNet3D().to(device)

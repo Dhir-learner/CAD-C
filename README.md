@@ -1,307 +1,318 @@
-# CADC: lung nodule malignancy prediction on LIDC-IDRI
+# CADC: AI for lung nodule analysis on CT
 
-An ensemble of two deep-learning models (a 3D CNN and a 2.5D multi-view CNN) that looks at a
-lung nodule in a CT scan and estimates how likely it is to be malignant. A pretrained detector
-can also find nodules automatically. It is trained on the public LIDC-IDRI dataset (1,010 patients,
-1,018 CT scans), with a local web app for exploring it.
+**CADC** (computer-aided detection and characterisation) is an end-to-end deep-learning project that
+**finds lung nodules in chest CT scans and estimates how suspicious they look**. It uses an ensemble of
+two neural networks trained on the public LIDC-IDRI dataset, and a local web app with a 3D lung model,
+explainability heatmaps and an AI assistant.
 
 ![Tour of the web app](docs/demo.gif)
 
-**What the labels are.** In LIDC-IDRI, up to 4 radiologists rated each nodule's
-likelihood of malignancy from 1 (highly unlikely) to 5 (highly suspicious).
-This project averages the ratings per nodule: at most 2.5 counts as benign,
-at least 3.5 counts as malignant, and nodules in between are left out as
-ambiguous. These are expert opinions, not biopsy results, so the model learns
-to predict what radiologists would think. It is a research project, not a
-clinical tool.
+> [!WARNING]
+> **Research project, not a medical device.** CADC has not been clinically validated. Its models learned
+> radiologists' *opinions* about nodules, not biopsy results, and they can be wrong. Nothing here is a
+> diagnosis. Anyone with a health concern should see a qualified doctor.
+
+---
+
+## Contents
+
+- [What's been built](#whats-been-built)
+- [Results](#results)
+- [How it works](#how-it-works)
+- [The web app](#the-web-app)
+- [Quick start (Windows)](#quick-start-windows)
+- [Running on Google Colab](#running-on-google-colab)
+- [Command reference](#command-reference)
+- [Project structure](#project-structure)
+- [Limitations](#limitations)
+- [Troubleshooting](#troubleshooting)
+- [Ideas for future work](#ideas-for-future-work)
+- [Credits and licences](#credits-and-licences)
+
+---
+
+## What's been built
+
+| Area | What was done |
+|---|---|
+| **Data pipeline** | Downloaded all 1,018 LIDC-IDRI CT scans (~125 GB) from The Cancer Imaging Archive, one at a time. For each one, pylidc groups the radiologists' annotations into nodules, and the pipeline saves a 64 mm cube (1 mm voxels) around every nodule, then deletes the raw scan. The result is **0.9 GB of patches** instead of 125 GB. It resumes after interruptions, and ran on Google Colab. |
+| **Labels** | Up to 4 radiologists rated each nodule 1–5. The mean rating gives the label: ≤ 2.5 benign, ≥ 3.5 malignant, ambiguous nodules in between left out. That leaves **1,627 nodules from 724 patients (504 malignant)**. |
+| **Model 1: 3D ResNet** | A 3D convolutional network (8.3 M parameters) trained from scratch on 48³ mm cubes. |
+| **Model 2: 2.5D multi-view CNN** | Cuts 9 planes through each nodule (3 orthogonal, 6 diagonal), reads them with one shared ImageNet-pretrained ResNet18, and pools the results (11.2 M parameters). |
+| **Ensemble** | Averages all 10 networks (5 folds × 2 architectures). |
+| **Honest evaluation** | 5-fold cross-validation **split by patient**, with scores from the final epoch (not the best one), 95% bootstrap confidence intervals, and nodule- and patient-level metrics. An overfitting check compares training and unseen-patient scores and learning curves. |
+| **Real-diagnosis test** | Tested the models against the 118 LIDC patients whose diagnosis was **confirmed** (biopsy, surgery, 2-year stability or progression), compared with the radiologists' own ratings. |
+| **Automatic detection** | Integrated MONAI's pretrained LUNA16 RetinaNet so the app **finds nodules itself** across a whole scan, then scores each one with the ensemble. |
+| **Explainability** | Grad-CAM "AI attention" heatmaps show which regions pushed the 3D models towards "malignant". |
+| **Web app** | Five pages: Home, Learn, Analyse, Model and About. Includes an interactive **Three.js 3D lung model** that shows cancer stages 0–IV, interactive charts, printable reports, a mandatory AI disclaimer, and dark design that works on phones. |
+| **AI assistant** | A chat assistant (Groq API) on every page. It explains nodules, lung cancer and the results, and is instructed never to diagnose and to put emergency advice first. |
+| **Training infrastructure** | Resumable training with mixed precision. Runs on a 6 GB laptop GPU (RTX 4050) or Google Colab; Colab can be driven from Claude Code through the Colab MCP server. |
+
+---
 
 ## Results
 
-All numbers come from 5-fold cross-validation split by patient: each nodule is scored only by
-models that never saw that patient. 1,627 nodules from 724 patients (504 malignant).
+All numbers are from **5-fold cross-validation split by patient**: every nodule is scored only by
+models that never saw that patient during training.
 
 | Model | AUC vs radiologist ratings (95% CI) | Accuracy | Sensitivity | Specificity | Patient-level AUC | AUC vs confirmed diagnosis |
 |---|---|---|---|---|---|---|
-| 3D ResNet (8.3 M params, from scratch) | 0.924 (0.907–0.939) | 86.7% | 83.9% | 87.9% | 0.933 | 0.662 |
-| 2.5D multi-view (ResNet18, ImageNet-pretrained) | 0.931 (0.916–0.944) | 86.4% | 83.3% | 87.8% | 0.929 | 0.713 |
-| **Ensemble (10 networks)** | **0.936 (0.921–0.949)** | **88.3%** | **84.9%** | **89.8%** | **0.941** | 0.680 |
-| *Radiologists' own ratings* | – | – | – | – | – | *0.765* |
+| 3D ResNet | 0.924 (0.907–0.939) | 86.7% | 83.9% | 87.9% | 0.933 | 0.66 |
+| 2.5D multi-view | 0.931 (0.916–0.944) | 86.4% | 83.3% | 87.8% | 0.929 | 0.71 |
+| **Ensemble (10 networks)** | **0.936 (0.921–0.949)** | **88.3%** | **84.9%** | **89.8%** | **0.941** | 0.68 |
+| *Radiologists' own ratings* | – | – | – | – | – | *0.77* |
 
-- **Against radiologists' ratings** the ensemble beats either model alone, within the 0.85–0.95 range
-  usually reported for LIDC-IDRI.
-- **Against confirmed diagnoses** (118 LIDC patients with a diagnosis confirmed by biopsy, surgery,
-  2-year stability or progression), every model scores much lower (AUC about 0.66–0.71), below the
-  radiologists' own ratings (0.77). The models learned to imitate radiologists' opinions, and predicting
-  actual cancer is harder; many of these patients also had metastases from other cancers. With 118 patients
-  the confidence intervals are wide (about ±0.12), so the differences between the three models on this test
-  are not meaningful. This is the most honest limitation of the project.
-- **No overfitting**: training vs unseen-patient AUC differ by about 0.02, and validation AUC does not fall
-  late in training (see the Model page of the web app).
-- **Detection**: MONAI's pretrained LUNA16 RetinaNet found 14 of 17 radiologist-marked nodules on a
-  spot check of 3 scans (it was trained on LUNA16, which comes from LIDC-IDRI, so this is not an independent test).
+*AUC: 0.5 = guessing, 1.0 = perfect. Accuracy, sensitivity and specificity use a 50% threshold.*
 
----
+**What the results mean**
 
-## How to run it (step by step)
-
-Everything runs in Google Colab from one notebook. You don't need to install
-anything on your PC.
-
-### 0. Open the notebook
-
-Open this link while signed in to your Google account:
-
-**https://colab.research.google.com/github/Dhir-learner/CAD-C/blob/main/notebooks/colab_launcher.ipynb**
-
-(Or in Colab: *File → Open notebook → GitHub*, paste
-`https://github.com/Dhir-learner/CAD-C`, and pick `notebooks/colab_launcher.ipynb`.)
-
-Optionally, use *File → Save a copy in Drive* so your outputs stay in the notebook.
-
-### Setup cell (run this first, every time)
-
-Run the **Setup** cell. It:
-1. connects Google Drive (approve the popup; your results are saved there),
-2. downloads the latest code from GitHub,
-3. installs the Python packages.
-
-Run it again whenever you open the notebook, reconnect, or change the runtime.
-
-### Step 1: Preprocess the data (once; about 2–3 hours; no GPU needed)
-
-> **If you already started preprocessing earlier** (e.g. in another notebook),
-> let that finish first. Then just run the check cell in Step 1: if it says
-> `1018/1018`, skip to Step 2.
-
-1. Use a **CPU runtime** (*Runtime → Change runtime type → CPU*). It doesn't use GPU quota.
-2. Run **Setup**, then the preprocessing cell. For each of the 1,018 scans, it
-   downloads the CT from the Cancer Imaging Archive, cuts out a 64 mm cube around
-   every nodule, saves it to `MyDrive/CADC/patches/`, and deletes the raw scan.
-   It prints one line per scan.
-3. **Keep the browser tab open and stop the PC from sleeping** (Windows:
-   *Settings → System → Power → Sleep: Never*) while it runs.
-4. When it finishes, run the check cell. It should say `1018/1018`.
-
-**If it disconnects:** reconnect, run Setup, and run the preprocessing cell
-again. Finished scans are skipped. The same goes for any scan listed in
-`failed.log`: rerunning retries only those.
-
-### Step 2: Train (about 1–2 hours in total; needs a GPU)
-
-1. Switch to a GPU: *Runtime → Change runtime type → T4 GPU → Save*.
-   (This restarts the machine; your files on Drive are safe.)
-2. Run **Setup** again. The last line should show `Tesla T4`.
-3. Run the **copy** cell (copies the patches from Drive to the fast local disk).
-4. Run the **training** cell. It trains 5 models, one per cross-validation fold
-   (see "How the evaluation works" below), 60 epochs each. Every epoch prints a line like:
-   ```
-   epoch=12 | train_loss=0.41 | lr=0.0009 | auc=0.91 | accuracy=0.86 | ... | best_auc=0.9204
-   ```
-   `auc` is the key number: 0.5 is guessing, 1.0 is perfect.
-
-**If it disconnects or the free GPU quota runs out** (Colab's free tier allows
-a few GPU hours per day): come back later, switch to T4, run Setup → copy →
-training again. Each fold resumes from its last saved epoch, and finished folds
-are skipped automatically.
-
-### Step 3: Evaluate
-
-Run the **evaluate** cell. It prints the results and shows a ROC curve:
-
-```
-fold0: AUC ...            <- each of the 5 models on its own held-out patients
-nodule level: n=... | AUC ... (95% CI ...) | acc ... | sens ... | spec ...
-patient level: n=... | AUC ...
-```
-
-- **Nodule level:** how well it separates malignant from benign nodules.
-- **Patient level:** a patient counts as positive if any of their nodules is malignant,
-  and is scored by their most suspicious nodule.
-- **sens / spec:** the share of malignant / benign nodules classified correctly at the 0.5 threshold.
-
-Results are saved to `MyDrive/CADC/runs/baseline/`: `metrics.json`, `roc.png`,
-and `oof_predictions.csv` (one prediction per nodule).
-
-For reference, published models on LIDC-IDRI with this kind of labelling
-usually report a nodule-level AUC of roughly 0.85–0.95.
-
-### Step 4: Predict
-
-The **predict** cell scores the nodules of one preprocessed scan with all 5 models:
-
-```
-python -m cadc.predict --run RUN --shard PATCHES/LIDC-IDRI-0001_0012.npz
-```
-
-To score a nodule in **a new CT scan** (a folder of `.dcm` files), give its centre as seen in a DICOM viewer:
-
-```
-python -m cadc.predict --run RUN --dicom /content/my_scan --center X Y SLICE
-```
-
-`X` is the column, `Y` the row, and `SLICE` the slice number counted from the
-lowest slice (feet end), all starting at 0. Upload the folder to Colab or Drive first.
+1. **The models predict radiologists' opinions well.** The ensemble reaches AUC 0.936, better than either
+   model alone and within the 0.85–0.95 range usually reported for this dataset.
+2. **Predicting actual cancer is much harder.** On 118 patients with confirmed diagnoses, every model drops to
+   AUC ≈ 0.66–0.71, below the radiologists' own ratings (0.77). The models learned to imitate ratings, not
+   pathology, and many of these patients had metastases from other cancers. With so few patients the
+   uncertainty is about ±0.12, so the three models can't be ranked on this test. **This is the project's most
+   important limitation.**
+3. **No overfitting.** Training and unseen-patient AUC differ by only ~0.02, and validation AUC never falls
+   late in training. The 3D model was still slightly improving at epoch 60.
+4. **Detection works on a spot check.** The pretrained detector found 14 of 17 radiologist-marked nodules
+   on 3 scans, within a few millimetres of their centres. It was trained on LUNA16, which is drawn from LIDC-IDRI,
+   so this is not an independent test.
 
 ---
 
-## Second model, ensemble and diagnosis check
+## How it works
 
-Besides the 3D ResNet (`--arch resnet3d`, the default), `cadc.train` can train a **2.5D multi-view
-CNN** (`--arch multiview2d`): it slices 9 planes through the nodule (3 orthogonal, 6 diagonal), runs each
-through one shared ImageNet-pretrained ResNet18, and pools the features. Both use the same patient folds,
-so their out-of-fold predictions can be averaged honestly.
-
-```
-rem everything in one go (both models, evaluation, ensemble, diagnosis check):
-train_local.bat
-
-rem or step by step:
-.venv\Scripts\python -m cadc.train --arch multiview2d --data data\patches --out runs\multiview --fold 0
-.venv\Scripts\python -m cadc.evaluate --run runs\multiview
-.venv\Scripts\python -m cadc.ensemble --runs runs\baseline runs\multiview --names "3D ResNet" "2.5D multi-view" --out runs\ensemble
-.venv\Scripts\python -m cadc.diagnosis_eval --runs runs\baseline runs\multiview --out runs\ensemble --data data\patches --diagnosis data\meta\diagnosis.xls
+```mermaid
+flowchart LR
+    A[LIDC-IDRI<br/>1,018 CT scans] --> B[Preprocess<br/>pylidc nodules<br/>1 mm, 64 mm cubes]
+    B --> C[(1,627 labelled<br/>nodule patches)]
+    C --> D[3D ResNet × 5 folds]
+    C --> E[2.5D multi-view × 5 folds]
+    D --> F{Ensemble}
+    E --> F
+    G[New CT scan] --> H[RetinaNet detector<br/>finds candidates]
+    H --> F
+    G -. or click a nodule .-> F
+    F --> I[Malignancy likelihood<br/>+ Grad-CAM heatmap]
 ```
 
-The diagnosis spreadsheet comes from The Cancer Imaging Archive:
-`curl -L -o data\meta\diagnosis.xls https://www.cancerimagingarchive.net/wp-content/uploads/tcia-diagnosis-data-2012-04-20.xls`
+**Preprocessing** ([cadc/preprocess.py](cadc/preprocess.py))
+- Reads each scan's slices and converts them to Hounsfield units.
+- pylidc clusters the 4 radiologists' outlines into nodules.
+- Crops a cube around each nodule's centre, resamples it to 1 mm isotropic voxels, and clips it to −1000…400 HU.
 
-## Automatic nodule detection
+**Training** ([cadc/train.py](cadc/train.py))
+- Random 48³ crops, flips and 90° rotations for augmentation.
+- AdamW optimiser, cosine learning rate, class-balanced loss, mixed precision, 60 epochs.
+- A checkpoint every epoch, so interrupted runs resume where they stopped.
 
-The web app can search a whole scan for nodules with MONAI's pretrained
-[lung_nodule_ct_detection](https://github.com/Project-MONAI/model-zoo) bundle (RetinaNet trained on LUNA16,
-Apache-2.0), then score every candidate with the ensemble. One-time setup (about 160 MB):
+**The two architectures** ([cadc/model.py](cadc/model.py))
+- **3D ResNet:** four stages of residual blocks (32→64→128→256 filters) → global pooling → one logit. It sees the nodule's true 3D shape.
+- **2.5D multi-view:** 9 planes through the nodule centre, each upscaled to 96 px and passed through an ImageNet-pretrained ResNet18. The mean and max of the features give one logit. Pretraining makes it learn fast; it reaches its best within ~10 epochs.
 
-```
-uv pip install -r requirements-app.txt
-.venv\Scripts\python -c "from monai.bundle import download; download(name='lung_nodule_ct_detection', bundle_dir='data/bundles')"
-```
+**Evaluation**
+- **Patient-grouped folds:** all nodules of a patient stay in one fold, so no model is tested on a patient it trained on.
+- **Final-epoch predictions:** choosing the "best" epoch would peek at the test fold.
+- **Ensembling:** the ensemble averages out-of-fold predictions; both models use the same folds, so this stays honest.
 
-It takes about 30 seconds per scan on the laptop GPU. Without the bundle the app still works; the button is hidden.
+**Detection** ([cadc/detect.py](cadc/detect.py))
+- The volume is reoriented to RAS, resampled to 0.70 × 0.70 × 1.25 mm, and scanned with a sliding window.
+- Boxes are mapped back to slice coordinates.
+- Each candidate is then cropped and scored by the ensemble.
 
-## AI chat assistant
+---
 
-Every page of the web app has an **Ask CADC AI** button: a chat assistant (via the [Groq API](https://console.groq.com),
-model `openai/gpt-oss-120b`) that explains lung nodules, lung cancer, the model's results and how to use the app. On the
-Analyse page it knows your latest result, so you can ask *"What does my result mean?"*.
+## The web app
 
-It is instructed never to diagnose, to always point people to a doctor, and to put emergency advice first when someone
-describes emergency symptoms. Chat messages are sent to Groq to generate replies (scans are not).
-
-**Setup:** create a file named `.env` in the CADC folder containing your key:
-
-```
-GROQ_API_KEY=your-key-here
-```
-
-`.env` is in `.gitignore`, so the key never goes to GitHub. **Never put the key in code**; this repository is public.
-Optionally add `GROQ_MODEL=...` to use a different Groq model. Without a key the app works, and the chat button shows it isn't configured.
-
-## Web app
-
-A local website with five pages. It runs on your PC with the trained models in `runsaseline`.
+A local website served by FastAPI. Scans are processed **on your computer** and are never uploaded.
 
 | Page | What's there |
 |---|---|
-| **Home** | Overview, live headline results, an interactive 3D model of the lungs |
-| **Learn** | What lung cancer is, types, risk factors, symptoms, lung nodules, staging, diagnosis, treatment, prevention, and *when to see a doctor*. Includes a 3D explorer: click labelled parts of the lungs, and switch between healthy and stages I–IV to watch a tumour grow, reach the lymph nodes and spread |
-| **Analyse a scan** | Upload a chest CT, let the AI **find nodules automatically** or click one, get the 10-network ensemble estimate with a low / intermediate / high band, each model's vote, CT views and an **AI attention heatmap** (Grad-CAM), plus a printable report |
-| **The model** | Accuracy, sensitivity, specificity, interactive ROC and learning curves, model comparison, the real-diagnosis test, per-fold results, architecture and limitations |
-| **About & FAQ** | Medical disclaimer, privacy, FAQ, credits |
+| **Home** | Overview, live headline results, a rotating 3D model of the lungs. |
+| **Learn** | A **3D explorer**: click labelled parts (trachea, bronchi, lobes, alveoli, lymph nodes), and switch between healthy lungs and stages I–IV to watch a tumour grow, reach the lymph nodes and spread. The page also covers what lung cancer is, its types, risk factors, symptoms, lung nodules, staging with survival rates, screening, diagnosis, treatment, prevention, and **when to see a doctor**. |
+| **Analyse a scan** | Upload a chest CT (a `.zip` of DICOM files, or the `.dcm` files) or try a sample. Then either click **Find nodules automatically** or click a nodule yourself. You get:<br>• a likelihood gauge with a low / intermediate / high band<br>• every network's vote<br>• CT views of the region the models saw, and the **AI attention** heatmap<br>• a **printable report** and an **Ask AI about this result** button |
+| **The model** | Headline metrics, interactive ROC and learning curves, model comparison, the real-diagnosis test, per-fold results, architecture and limitations. |
+| **About & FAQ** | Full medical disclaimer, privacy notes, FAQ, credits. |
 
-**AI warnings.** On first visit every page shows a disclaimer that must be accepted (it's an AI research tool, not a diagnosis; consult a doctor).
-The analyser stays locked until it is accepted, and every result repeats the advice to see a doctor.
+**Safety built in**
+- **First-visit disclaimer on every page**, which must be accepted before continuing: it's an AI, not a diagnosis, consult a doctor. The analyser stays locked until it's accepted.
+- **A warning banner and "what to do next" doctor advice** on every result.
+- **Scores from training scans are flagged as optimistic.**
+- **A medical disclaimer in every footer.**
+- **The AI assistant** is instructed never to diagnose and to direct emergencies to 112 / 911.
 
-**Start it:** double-click **`run_app.bat`** in the CADC folder. The browser opens at http://127.0.0.1:8000
-(keep the black window open while using it). Scans are processed on your PC and never uploaded anywhere.
+---
 
-**Analyse a scan:**
-1. Drop a **.zip of a DICOM CT series** (or select all its `.dcm` files), or click **Try a sample scan**.
-2. Scroll through the slices (mouse wheel, slider, or arrow keys), find the nodule where it looks largest, and **click its centre**.
-3. Click **Analyse nodule** (or press Enter). Switch between **CT** and **AI attention** to see where the models looked.
+## Quick start (Windows)
 
-For LIDC-IDRI scans, the nodules the radiologists marked are listed under the viewer: click one to analyse it directly.
-Those scans were in the training data, so their scores are optimistic (the app says so).
-The app does **not** find nodules by itself: you point to them.
+Tested on Windows 11 with Python 3.11 and an RTX 4050 laptop GPU (6 GB). Uses [uv](https://docs.astral.sh/uv/).
 
-First-time setup on a new PC (already done on this one):
+**1. Install**
 ```
+git clone https://github.com/Dhir-learner/CAD-C.git
+cd CAD-C
+uv venv --python 3.11 .venv
 uv pip install -r requirements.txt -r requirements-app.txt
 uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\python -c "import torch; print(torch.cuda.is_available())"
 ```
-Options: `run_app.bat --run runs\other_run --port 8080`.
+The last line must print `True` to use the GPU.
 
-## How the evaluation works (why the numbers are honest)
+**2. Get the data** (~125 GB is downloaded, streamed one scan at a time; ~0.9 GB is kept)
+```
+.venv\Scripts\python -m cadc.preprocess --out data\patches --work data\dicom
+```
+This takes a few hours at home; on Colab it took about 2 hours (see below). If you already have
+`patches.zip`, unzip it so the `.npz` files sit in `data\patches\` instead.
 
-- **5-fold cross-validation by patient.** Patients are split into 5 groups. Each
-  model trains on 4 groups and is tested on the 5th, which it has never seen.
-  All nodules of one patient stay in the same group, so the model can't
-  "recognise" a patient it trained on.
-- **Final-epoch predictions.** `evaluate` uses each model's last epoch by
-  default. The "best epoch" (highest validation AUC) is also saved, but choosing it
-  looks at the test group, so its score is slightly optimistic.
-  `python -m cadc.evaluate --run RUN --which best` shows it anyway.
+For the real-diagnosis test, also download the diagnosis spreadsheet:
+```
+curl -L -o data\meta\diagnosis.xls https://www.cancerimagingarchive.net/wp-content/uploads/tcia-diagnosis-data-2012-04-20.xls
+```
 
-## What the code does
+**3. Train and evaluate everything**
 
-| File | Purpose |
+Double-click **`train_local.bat`**. It:
+- trains both architectures on all 5 folds (about 2 hours on an RTX 4050),
+- evaluates each one,
+- runs the real-diagnosis test,
+- builds the ensemble.
+
+Results go to `runs\ensemble\`. If it's interrupted, run it again and it resumes.
+
+**4. Optional: automatic nodule detection** (about 160 MB)
+```
+.venv\Scripts\python -c "from monai.bundle import download; download(name='lung_nodule_ct_detection', bundle_dir='data/bundles')"
+```
+
+**5. Optional: the AI assistant.** Get a free key at [console.groq.com](https://console.groq.com/keys) and create a file called `.env` in the project folder:
+```
+GROQ_API_KEY=your-key-here
+```
+`.env` is git-ignored. **Never commit the key**; this repository is public.
+
+**6. Run the web app.** Double-click **`run_app.bat`**. The browser opens at http://127.0.0.1:8000 once the models are loaded. Keep the black window open while you use it.
+
+---
+
+## Running on Google Colab
+
+Colab is useful for the long preprocessing download and for training without a local GPU. Open
+[`notebooks/colab_launcher.ipynb`](https://colab.research.google.com/github/Dhir-learner/CAD-C/blob/main/notebooks/colab_launcher.ipynb) and run the cells in order:
+
+1. **Setup:** mounts Google Drive, clones this repo, installs packages. Run it again after every reconnect.
+2. **Preprocess:** use a *CPU* runtime; it needs no GPU and uses no GPU quota. Patches are saved to `MyDrive/CADC/patches/`.
+3. **Train:** switch to a *T4 GPU* runtime, copy the patches to local disk, and train the folds (add `--arch multiview2d` for the second model).
+4. **Evaluate and predict.**
+
+Every step resumes after a disconnect: rerun Setup and the step you were on. Keep the tab open and the PC awake.
+The free tier's GPU quota is enough, since training resumes across sessions.
+
+This project's preprocessing was run on Colab and driven from Claude Code through Google's
+[Colab MCP server](https://github.com/googlecolab/colab-mcp) (configured in `.mcp.json`).
+
+---
+
+## Command reference
+
+| Command | What it does |
 |---|---|
-| `cadc/preprocess.py` | Downloads each scan from TCIA; pylidc groups the radiologists' annotations into nodules; saves a 64³ patch (1 mm voxels, clipped to −1000…400 HU) per nodule with its ratings, one `.npz` file per scan. Resumable. |
-| `cadc/data.py` | Loads the patches, applies the label rule, makes patient-grouped folds, and augments training data (random 48³ crops, flips, rotations). |
-| `cadc/model.py` | The 3D ResNet (8.3 M parameters) and the 2.5D multi-view CNN (ImageNet-pretrained ResNet18, 11.2 M). |
-| `cadc/ensemble.py` | Averages several runs' out-of-fold predictions and compares them with the ensemble. |
-| `cadc/diagnosis_eval.py` | Tests models against the 157 LIDC patients with confirmed diagnoses, next to the radiologists' ratings. |
-| `cadc/detect.py` | Finds nodule candidates in a whole scan with MONAI's pretrained LUNA16 detector. |
-| `docs/make_demo_gif.py` | Records `docs/demo.gif` from the running web app. |
-| `cadc/train.py` | Trains one fold with mixed precision, class-balanced loss and a cosine learning-rate schedule. Saves `last.pt` every epoch (for resuming), `best.pt` and `final.pt`, `history.csv` and validation predictions. |
-| `cadc/evaluate.py` | Pools the 5 folds' predictions and reports AUC with a 95% confidence interval, accuracy, sensitivity, specificity, nodule and patient level, plus a ROC curve. |
-| `cadc/predict.py` | Averages the 5 models' scores on nodules from a shard or a new DICOM scan. |
-| `notebooks/colab_launcher.ipynb` | The Colab notebook used above. |
-| `app/server.py` | Web app backend (FastAPI): pages, scan upload, predictions, Grad-CAM, detection, metrics and chat APIs. |
-| `app/chat.py` | The AI assistant: system prompt with safety rules and real results, streaming calls to Groq. |
-| `app/static/` | Web app frontend: 5 pages, shared CSS/JS, the Three.js 3D lung model (`js/lungs3d.js`), charts (`js/model.js`). |
-| `train_local.bat`, `run_app.bat` | One-click training and web app on Windows. |
+| `python -m cadc.preprocess --out DIR --work TMP [--limit N]` | Download scans and save nodule patches (resumable). |
+| `python -m cadc.train --data DIR --out RUN --fold K [--arch resnet3d\|multiview2d]` | Train one fold. Other options: `--epochs`, `--batch-size`, `--lr`, `--min-readers 3` (stricter labels). |
+| `python -m cadc.evaluate --run RUN [--which final\|best]` | Pool the folds: AUC with CI, accuracy, sensitivity, specificity, ROC → `metrics.json`, `roc.png`. |
+| `python -m cadc.ensemble --runs RUN1 RUN2 --out DIR` | Average runs' out-of-fold predictions and compare → `comparison.json`. |
+| `python -m cadc.diagnosis_eval --runs RUN... --data DIR --diagnosis XLS` | Test against confirmed diagnoses next to the radiologists' ratings. |
+| `python -m cadc.predict --run RUN --shard FILE.npz` | Score the nodules of a preprocessed scan. |
+| `python -m cadc.predict --run RUN --dicom DIR --center X Y SLICE` | Score a nodule in a new CT scan (column, row, slice from the bottom; 0-based). |
+| `python -m app.server [--run RUN...] [--port 8000] [--no-browser]` | Start the web app (`run_app.bat` does this). |
+| `uv run --no-project --with playwright --with pillow python docs/make_demo_gif.py` | Re-record `docs/demo.gif` (needs the app running on port 8765). |
 
-Useful options for `cadc.train`: `--epochs`, `--batch-size`, `--lr`, and
-`--min-readers 3` (keep only nodules rated by at least 3 radiologists; a common,
-stricter choice in papers). To try a variation without overwriting results,
-change `RUN` in the Setup cell (e.g. `runs/min3readers`).
+---
+
+## Project structure
+
+```
+CAD-C/
+├── cadc/                      # the machine-learning package
+│   ├── preprocess.py          # TCIA download → pylidc nodules → 64 mm patches (.npz per scan)
+│   ├── data.py                # label rule, patient-grouped folds, augmentation
+│   ├── model.py               # 3D ResNet and 2.5D multi-view CNN
+│   ├── train.py               # resumable training of one fold
+│   ├── evaluate.py            # pooled out-of-fold metrics and ROC
+│   ├── ensemble.py            # combine runs, compare models
+│   ├── diagnosis_eval.py      # test against confirmed diagnoses
+│   ├── detect.py              # MONAI RetinaNet nodule detection
+│   └── predict.py             # score nodules from a shard or DICOM folder
+├── app/                       # the web app
+│   ├── server.py              # FastAPI: pages, upload, predict, Grad-CAM, detect, metrics, chat
+│   ├── chat.py                # Groq assistant: safety prompt, real results, streaming
+│   └── static/                # 5 HTML pages, css/, js/ (3D lungs, charts, analyser, chat), vendor/three.js
+├── notebooks/colab_launcher.ipynb
+├── docs/                      # demo.gif and the script that records it
+├── train_local.bat            # one-click: train both models, evaluate, ensemble, diagnosis test
+├── run_app.bat                # one-click: start the web app
+├── requirements.txt           # ML pipeline
+├── requirements-app.txt       # web app, detection, assistant
+└── .mcp.json                  # Colab MCP server config (for driving Colab from Claude Code)
+
+Not in git (large or private):
+├── data/patches/              # 1,018 .npz shards (~0.9 GB)
+├── data/meta/diagnosis.xls    # LIDC confirmed diagnoses
+├── data/bundles/              # MONAI detection bundle (~160 MB)
+├── runs/                      # checkpoints and results: baseline/, multiview/, ensemble/
+└── .env                       # GROQ_API_KEY
+```
+
+---
+
+## Limitations
+
+- **Labels are opinions.** The models predict what radiologists would rate a nodule, not whether it is cancer.
+  Against confirmed diagnoses they do clearly worse (see [Results](#results)).
+- **One dataset.** LIDC-IDRI comes from a handful of US institutions in the 2000s. Other scanners,
+  protocols and populations may give worse results. There has been no external validation.
+- **Detection is not independently tested.** The detector was trained on LUNA16 (a subset of LIDC-IDRI), and it
+  can miss nodules or flag other structures.
+- **No clinical context.** Doctors use growth over time, symptoms, smoking history and other tests. The models see
+  one 48 mm cube from one scan.
+- **Scores on LIDC scans are optimistic** in the app, because those scans were in the training data; the app says so.
+- **The assistant can be wrong.** It is a general-purpose language model with instructions, not a medical source.
+
+---
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| "Runtime disconnected" | Reconnect, run Setup, rerun the step you were on. Everything resumes. |
-| "Cannot connect to GPU backend" / quota reached | The free GPU quota is used up for now. Try again later (often next day); training resumes where it stopped. |
-| Training says `device=cpu` | The runtime isn't a GPU. Change the runtime to T4 and rerun Setup. |
-| `no .npz shards` | Step 1 hasn't finished, or the copy cell wasn't run in this session. |
-| `CUDA out of memory` | Add `--batch-size 16` to the training command. |
-| Scans in `failed.log` | Usually a network hiccup. Rerun the preprocessing cell; only those scans are retried. |
+| The web page looks unstyled (plain text) | Press **Ctrl+F5**. It was loaded before the server was ready. `run_app.bat` now waits, so this shouldn't recur. |
+| `torch.cuda.is_available()` is `False` | Reinstall the GPU build: `uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 --reinstall-package torch`. |
+| `CUDA out of memory` | Lower `--batch-size` (16 for the 3D model on a 6 GB GPU). |
+| `ModuleNotFoundError: pkg_resources` | `uv pip install "setuptools<81"` (pylidc still needs it). |
+| "Find nodules automatically" is missing | Download the detection bundle (Quick start step 4) and restart the app. |
+| Chat button is greyed out | Add `GROQ_API_KEY` to `.env` and restart the app. |
+| Colab "Runtime disconnected" | Reconnect, rerun Setup and the step you were on; everything resumes. |
+| Scans listed in `failed.log` | Usually a network hiccup: rerun preprocessing and only those scans are retried. |
 
-## Storage layout (Google Drive)
+---
 
-```
-MyDrive/CADC/
-├── patches/                one .npz per scan (~1–2 GB total) + failed.log
-└── runs/baseline/
-    ├── fold0/ … fold4/     last.pt, best.pt, final.pt, history.csv, val_predictions*.csv
-    ├── metrics.json, roc.png, oof_predictions.csv   (after Step 3)
-```
+## Ideas for future work
 
-## Running on your own PC (optional)
+- **External validation** on a separate, pathology-confirmed dataset such as LUNGx (TCIA).
+- **Stricter labels** (`--min-readers 3`) for direct comparison with published results.
+- **Calibration**, so that "70%" means about 70% of such nodules are rated malignant.
+- **Nodule measurements** (diameter and volume from segmentation) shown in the app.
+- **Hosting** a demo online (e.g. Hugging Face Spaces) with the same disclaimers.
 
-Your laptop's RTX 4050 (6 GB) can also train this model.
+---
 
-```
-uv venv --python 3.11 .venv
-uv pip install -r requirements.txt
-uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
-.venv\Scripts\python -m cadc.train --data data\patches --out runs\local --fold 0 --batch-size 16
-```
+## Credits and licences
 
-(Copy `MyDrive/CADC/patches` to `data\patches` first.)
-
-## Data and licence
-
-LIDC-IDRI is provided by The Cancer Imaging Archive under CC BY 3.0. Please
-cite: Armato SG III et al., *The Lung Image Database Consortium (LIDC) and Image
-Database Resource Initiative (IDRI)*, Medical Physics 38(2), 2011.
+- **Data:** LIDC-IDRI, The Cancer Imaging Archive, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+  Please cite: Armato SG III, McLennan G, Bidaut L, et al. *The Lung Image Database Consortium (LIDC) and Image
+  Database Resource Initiative (IDRI): a completed reference database of lung nodules on CT scans.* Medical Physics
+  38(2):915–931, 2011. Confirmed diagnoses: TCIA `tcia-diagnosis-data-2012-04-20.xls`.
+- **Detection model:** MONAI Model Zoo [`lung_nodule_ct_detection`](https://github.com/Project-MONAI/model-zoo)
+  (Apache-2.0), trained on [LUNA16](https://luna16.grand-challenge.org/) (CC BY 4.0).
+- **Pretrained backbone:** torchvision ResNet18 ImageNet weights.
+- **Built with:** PyTorch, torchvision, MONAI, pylidc, pydicom, scikit-learn, FastAPI, Three.js, Groq API, Google Colab.

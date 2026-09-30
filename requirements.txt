@@ -4,6 +4,7 @@ scipy
 pandas
 scikit-learn
 requests
+matplotlib
 pylidc
 pydicom<3
 # pylidc imports pkg_resources, which setuptools 81 removed.

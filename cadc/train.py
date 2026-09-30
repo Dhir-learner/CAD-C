@@ -3,7 +3,8 @@
 Checkpoints are written every epoch to <out>/fold<k>/last.pt, and training
 resumes from there automatically, so a Colab disconnect costs at most one
 epoch. The best epoch by validation AUC is kept as best.pt, with its
-validation predictions in val_predictions.csv.
+validation predictions in val_predictions.csv; the last epoch is kept as
+final.pt, with val_predictions_final.csv.
 
     python -m cadc.train --data /content/patches --out /content/drive/MyDrive/CADC/runs/baseline --fold 0
 """
@@ -139,8 +140,12 @@ def main():
         if m["auc"] > best_auc:
             best_auc = m["auc"]
             save_atomic({"model": model.state_dict(), "epoch": epoch, "metrics": m}, out / "best.pt")
-            preds = table.iloc[va].assign(prob=probs)
-            preds.to_csv(out / "val_predictions.csv", index=False)
+            table.iloc[va].assign(prob=probs).to_csv(out / "val_predictions.csv", index=False)
+        if epoch == args.epochs - 1:
+            # The final epoch is chosen without looking at validation scores, so these
+            # predictions give an unbiased estimate; the best-epoch ones are optimistic.
+            save_atomic({"model": model.state_dict(), "epoch": epoch, "metrics": m}, out / "final.pt")
+            table.iloc[va].assign(prob=probs).to_csv(out / "val_predictions_final.csv", index=False)
         save_atomic({"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                      "scaler": scaler.state_dict(), "epoch": epoch, "best_auc": best_auc}, last)
 

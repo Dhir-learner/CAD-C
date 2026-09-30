@@ -10,6 +10,7 @@ skipped, so rerunning after a Colab disconnect picks up where it stopped.
 """
 import argparse
 import builtins
+import configparser
 import io
 import os
 import shutil
@@ -28,6 +29,9 @@ from scipy import ndimage
 for _name in ("int", "float", "bool"):
     if not hasattr(np, _name):
         setattr(np, _name, getattr(builtins, _name))
+# ...and SafeConfigParser, which Python 3.12 removed.
+if not hasattr(configparser, "SafeConfigParser"):
+    configparser.SafeConfigParser = configparser.ConfigParser
 
 PATCH = 64  # patch edge in voxels, at 1 mm isotropic spacing
 HU_MIN, HU_MAX = -1000, 400

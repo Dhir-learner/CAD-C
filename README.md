@@ -116,28 +116,32 @@ lowest slice (feet end), all starting at 0. Upload the folder to Colab or Drive 
 
 ---
 
-## Web app: upload a CT scan and analyse a nodule
+## Web app
 
-A local web page where you upload a chest CT, click on a nodule, and get the
-5-model malignancy estimate, each model's vote, and axial/coronal/sagittal views
-of what the model saw. It runs on your PC with the trained models in `runsaseline`.
+A local website with five pages. It runs on your PC with the trained models in `runsaseline`.
 
-**Start it:** double-click **`run_app.bat`** in the CADC folder. The browser opens
-at http://127.0.0.1:8000 (keep the black window open while using it).
+| Page | What's there |
+|---|---|
+| **Home** | Overview, live headline results, an interactive 3D model of the lungs |
+| **Learn** | What lung cancer is, types, risk factors, symptoms, lung nodules, staging, diagnosis, treatment, prevention, and *when to see a doctor*. Includes a 3D explorer: click labelled parts of the lungs, and switch between healthy and stages I–IV to watch a tumour grow, reach the lymph nodes and spread |
+| **Analyse a scan** | Upload a chest CT, click a nodule, get the 5-model estimate with a low / intermediate / high band, each model's vote, CT views and an **AI attention heatmap** (Grad-CAM), plus a printable report |
+| **The model** | Accuracy, sensitivity, specificity, interactive ROC and learning curves, per-fold results, architecture and limitations |
+| **About & FAQ** | Medical disclaimer, privacy, FAQ, credits |
 
-**Use it:**
-1. Drop a **.zip of a DICOM CT series** (or select all its `.dcm` files), or click
-   **Try a sample scan** to load LIDC-IDRI-0001.
-2. Scroll through the slices (mouse wheel, slider, or arrow keys), find the nodule
-   where it looks largest, and **click its centre**.
-3. Click **Analyse nodule** (or press Enter).
+**AI warnings.** On first visit every page shows a disclaimer that must be accepted (it's an AI research tool, not a diagnosis; consult a doctor).
+The analyser stays locked until it is accepted, and every result repeats the advice to see a doctor.
 
-For LIDC-IDRI scans, the nodules the radiologists marked are listed under the
-viewer: click one to analyse it directly. Those scans were in the training data,
-so their scores are optimistic (the app says so).
+**Start it:** double-click **`run_app.bat`** in the CADC folder. The browser opens at http://127.0.0.1:8000
+(keep the black window open while using it). Scans are processed on your PC and never uploaded anywhere.
 
-The app does **not** find nodules by itself: you point to them. It is a research
-prototype, not a diagnostic tool.
+**Analyse a scan:**
+1. Drop a **.zip of a DICOM CT series** (or select all its `.dcm` files), or click **Try a sample scan**.
+2. Scroll through the slices (mouse wheel, slider, or arrow keys), find the nodule where it looks largest, and **click its centre**.
+3. Click **Analyse nodule** (or press Enter). Switch between **CT** and **AI attention** to see where the models looked.
+
+For LIDC-IDRI scans, the nodules the radiologists marked are listed under the viewer: click one to analyse it directly.
+Those scans were in the training data, so their scores are optimistic (the app says so).
+The app does **not** find nodules by itself: you point to them.
 
 First-time setup on a new PC (already done on this one):
 ```
@@ -168,7 +172,8 @@ Options: `run_app.bat --run runs\other_run --port 8080`.
 | `cadc/evaluate.py` | Pools the 5 folds' predictions and reports AUC with a 95% confidence interval, accuracy, sensitivity, specificity, nodule and patient level, plus a ROC curve. |
 | `cadc/predict.py` | Averages the 5 models' scores on nodules from a shard or a new DICOM scan. |
 | `notebooks/colab_launcher.ipynb` | The Colab notebook used above. |
-| `app/server.py`, `app/static/index.html` | The web app (FastAPI backend + single-page frontend). |
+| `app/server.py` | Web app backend (FastAPI): pages, scan upload, predictions, Grad-CAM, metrics API. |
+| `app/static/` | Web app frontend: 5 pages, shared CSS/JS, the Three.js 3D lung model (`js/lungs3d.js`), charts (`js/model.js`). |
 | `train_local.bat`, `run_app.bat` | One-click training and web app on Windows. |
 
 Useful options for `cadc.train`: `--epochs`, `--batch-size`, `--lr`, and

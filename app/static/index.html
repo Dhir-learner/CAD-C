@@ -3,473 +3,127 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CADC Nodule Analysis</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234cc2ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%2306101a' stroke-width='3'/%3E%3C/svg%3E">
+<title>CADC Lung Nodule AI</title>
+<meta name="description" content="A 3D deep-learning research model that estimates how suspicious a lung nodule looks on CT.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234cc2ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%23060a12' stroke-width='3'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-<style>
-:root {
-  --bg: #0b1017;
-  --bg-grad: radial-gradient(1200px 600px at 10% -10%, #13233a 0%, transparent 60%),
-             radial-gradient(900px 500px at 110% 10%, #1a1633 0%, transparent 55%);
-  --panel: #111823;
-  --panel-2: #0d141d;
-  --border: #1f2a38;
-  --text: #e6edf5;
-  --muted: #8a9bb0;
-  --accent: #4cc2ff;
-  --accent-2: #7c6cff;
-  --benign: #34d399;
-  --warn: #fbbf24;
-  --malignant: #f87171;
-  --shadow: 0 10px 40px rgba(0, 0, 0, .35);
-  --radius: 16px;
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; }
-body {
-  background: var(--bg); background-image: var(--bg-grad); background-attachment: fixed;
-  color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; min-height: 100vh;
-}
-button { font: inherit; color: inherit; cursor: pointer; }
-.mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
-
-/* header */
-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 18px 28px; border-bottom: 1px solid var(--border);
-  background: rgba(11, 16, 23, .7); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 10;
-}
-.brand { display: flex; align-items: center; gap: 12px; }
-.logo {
-  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 18px rgba(76, 194, 255, .35);
-}
-.brand h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .2px; }
-.brand p { margin: 0; font-size: 12.5px; color: var(--muted); }
-.status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
-  padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.dot.ok { background: var(--benign); box-shadow: 0 0 10px var(--benign); }
-.dot.bad { background: var(--malignant); }
-
-main { max-width: 1320px; margin: 0 auto; padding: 24px 28px 48px; display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr); gap: 24px; }
-@media (max-width: 980px) { main { grid-template-columns: 1fr; padding: 16px; } header { padding: 14px 16px; } }
-
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 18px; border-bottom: 1px solid var(--border); }
-.card-head h2 { font-size: 14px; margin: 0; font-weight: 600; letter-spacing: .3px; }
-.card-body { padding: 18px; }
-.muted { color: var(--muted); }
-.small { font-size: 13px; }
-
-/* upload */
-.drop {
-  display: block; cursor: pointer; margin: 18px; border: 1.5px dashed #2b3a4f; border-radius: 14px; padding: 56px 24px; text-align: center;
-  background: linear-gradient(180deg, rgba(76, 194, 255, .04), transparent); transition: .2s;
-}
-.drop.over { border-color: var(--accent); background: rgba(76, 194, 255, .08); transform: scale(1.005); }
-.drop h3 { margin: 14px 0 6px; font-size: 18px; }
-.drop .icon { width: 64px; height: 64px; margin: 0 auto; border-radius: 18px; display: grid; place-items: center;
-  background: rgba(76, 194, 255, .1); color: var(--accent); }
-.btn { border: 1px solid var(--border); background: #172131; padding: 10px 16px; border-radius: 10px; font-weight: 600;
-  transition: .15s; display: inline-flex; align-items: center; gap: 8px; }
-.btn:hover { border-color: #33455e; background: #1b283b; }
-.btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 0; color: #06101a; }
-.btn.primary:hover { filter: brightness(1.08); }
-.btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
-.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.center { justify-content: center; }
-
-/* viewer */
-.viewer { display: none; }
-.viewer.on { display: block; }
-.stage { position: relative; margin: 18px; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 1; cursor: crosshair; }
-.stage canvas { width: 100%; height: 100%; display: block; }
-.hud { position: absolute; left: 12px; top: 10px; font-size: 12px; color: #cfe3f7; text-shadow: 0 1px 2px #000; pointer-events: none; }
-.hud.r { left: auto; right: 12px; text-align: right; }
-.controls { padding: 0 18px 18px; display: grid; gap: 14px; }
-input[type=range] { width: 100%; accent-color: var(--accent); }
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-.seg button { border: 0; background: transparent; padding: 7px 12px; font-size: 13px; color: var(--muted); }
-.seg button.on { background: #1b283b; color: var(--text); }
-.chips { display: flex; gap: 8px; flex-wrap: wrap; }
-.chip { border: 1px solid var(--border); background: var(--panel-2); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; }
-.chip:hover { border-color: var(--accent); }
-.chip b { color: var(--accent); font-weight: 600; }
-
-/* steps */
-.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-.steps li { display: flex; gap: 12px; align-items: flex-start; color: var(--muted); }
-.steps li.active { color: var(--text); }
-.steps li.done { color: var(--muted); }
-.num { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 700;
-  border: 1px solid var(--border); background: var(--panel-2); }
-.active .num { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #06101a; border: 0; }
-.done .num { background: rgba(52, 211, 153, .15); color: var(--benign); border-color: rgba(52, 211, 153, .4); }
-
-/* result */
-.result { display: none; }
-.result.on { display: block; animation: rise .45s ease both; }
-@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.gauge-wrap { display: flex; align-items: center; gap: 22px; }
-.gauge { position: relative; width: 150px; height: 150px; flex: none; }
-.gauge svg { transform: rotate(-90deg); }
-.gauge .val { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
-.gauge .val b { font-size: 30px; font-weight: 700; display: block; line-height: 1; }
-.gauge .val span { font-size: 12px; color: var(--muted); }
-.verdict { display: inline-block; padding: 5px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
-.verdict.benign { background: rgba(52, 211, 153, .12); color: var(--benign); border: 1px solid rgba(52, 211, 153, .35); }
-.verdict.malignant { background: rgba(248, 113, 113, .12); color: var(--malignant); border: 1px solid rgba(248, 113, 113, .35); }
-.bars { display: grid; gap: 8px; margin-top: 18px; }
-.bar { display: grid; grid-template-columns: 64px 1fr 44px; gap: 10px; align-items: center; font-size: 12.5px; }
-.track { height: 8px; background: #1a2433; border-radius: 99px; overflow: hidden; }
-.fill { height: 100%; border-radius: 99px; width: 0; transition: width .8s cubic-bezier(.2, .8, .2, 1); }
-.views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
-.views figure { margin: 0; }
-.views img { width: 100%; aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--border); image-rendering: auto; display: block; }
-.views figcaption { font-size: 11.5px; color: var(--muted); text-align: center; margin-top: 5px; }
-.note { font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--warn); background: rgba(251, 191, 36, .06);
-  padding: 10px 12px; border-radius: 0 8px 8px 0; margin-top: 16px; }
-.history { display: grid; gap: 8px; }
-.hist { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
-  background: var(--panel-2); border: 1px solid var(--border); font-size: 13px; cursor: pointer; }
-.hist:hover { border-color: #33455e; }
-.pill { font-weight: 700; font-size: 12px; padding: 3px 9px; border-radius: 99px; }
-.side { display: grid; gap: 24px; align-content: start; }
-.disclaimer { font-size: 12px; color: var(--muted); text-align: center; grid-column: 1 / -1; margin-top: 4px; }
-
-/* loading */
-.overlay { position: absolute; inset: 0; display: none; place-items: center; background: rgba(5, 9, 14, .72); z-index: 3; }
-.overlay.on { display: grid; }
-.spinner { width: 42px; height: 42px; border-radius: 50%; border: 3px solid #23324a; border-top-color: var(--accent); animation: spin .9s linear infinite; margin: 0 auto 12px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; transition: .25s;
-  background: #2a1519; border: 1px solid rgba(248, 113, 113, .5); color: #fecaca; padding: 12px 18px; border-radius: 12px; z-index: 50; max-width: 90vw; }
-.toast.on { opacity: 1; transform: translateX(-50%); }
-.upload-wrap { position: relative; align-self: start; }
-@media (max-width: 560px) { .brand p { display: none; } .brand h1 { font-size: 15px; } .status { padding: 5px 10px; font-size: 12px; white-space: nowrap; } }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+<script type="importmap">{ "imports": { "three": "/static/vendor/three.module.min.js" } }</script>
 </head>
-<body>
-<header>
-  <div class="brand">
-    <div class="logo">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#06101a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 3v8"/><path d="M8.5 7.5C6 8 4 11 4 15c0 3 1 5 3 5 2.5 0 4-2 4-5V9.5"/><path d="M15.5 7.5C18 8 20 11 20 15c0 3-1 5-3 5-2.5 0-4-2-4-5V9.5"/>
-      </svg>
+<body data-page="home">
+<div id="nav"></div>
+
+<header class="hero">
+  <div class="container hero-grid">
+    <div class="reveal">
+      <span class="pill"><span class="dot ok"></span> AI research project · runs on your computer</span>
+      <h1>Look inside a lung nodule with <span class="grad-text">3D deep learning</span></h1>
+      <p class="lead">CADC is a neural network trained on more than a thousand chest CT scans. Point it at a nodule and it
+        estimates how suspicious that nodule looks, and shows you where it looked.</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a class="btn primary lg" href="/analyze">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          Analyse a scan</a>
+        <a class="btn lg" href="/learn">Learn about lung cancer</a>
+      </div>
+      <div class="alert" style="margin-top:28px;max-width:560px">
+        <span id="heroWarn"></span>
+        <div><b>An AI model, not a doctor.</b> Its output is a research estimate and can be wrong.
+          Please consult a qualified doctor about any scan or symptom.</div>
+      </div>
     </div>
-    <div>
-      <h1>CADC Nodule Analysis</h1>
-      <p>3D deep-learning estimate of lung nodule malignancy</p>
+    <div class="hero-3d reveal">
+      <div class="stage3d" id="hero3d" aria-label="Interactive 3D model of the lungs with a tumour in the right upper lobe"></div>
+      <span class="pill hero-hint tiny">Drag to rotate · <a href="/learn#explore">explore stages →</a></span>
     </div>
   </div>
-  <div class="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
 </header>
 
-<main>
-  <section class="card upload-wrap">
-    <div class="card-head">
-      <h2 id="leftTitle">CT scan</h2>
-      <div class="row" id="viewerTools" style="display:none">
-        <div class="seg" id="windowSeg">
-          <button data-w="lung" class="on">Lung</button><button data-w="soft">Soft tissue</button>
-        </div>
-        <button class="btn small" id="newScan">New scan</button>
-      </div>
+<section class="block" style="padding-top:24px">
+  <div class="container">
+    <div class="grid c4" id="stats">
+      <div class="card stat reveal"><div class="v grad-text" data-k="auc">0.92</div><div class="l">AUC on unseen patients (1.0 = perfect)</div></div>
+      <div class="card stat reveal"><div class="v" data-k="acc">87%</div><div class="l">Nodules classified correctly</div></div>
+      <div class="card stat reveal"><div class="v" data-k="nodules">1,627</div><div class="l">Labelled nodules learned from</div></div>
+      <div class="card stat reveal"><div class="v" data-k="scans">1,018</div><div class="l">CT scans in the LIDC-IDRI dataset</div></div>
     </div>
-
-    <div id="uploader">
-      <label class="drop" id="drop">
-        <div class="icon">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-        </div>
-        <h3>Drop a chest CT scan here</h3>
-        <p class="muted small">A <b>.zip</b> of the DICOM series, or select all the <b>.dcm</b> files of one scan.</p>
-        <div class="row center" style="margin-top:18px">
-          <span class="btn primary">Choose files</span>
-          <button type="button" class="btn" id="demoBtn">Try a sample scan</button>
-        </div>
-        <input type="file" id="fileInput" multiple accept=".zip,.dcm,application/dicom,application/zip" hidden>
-      </label>
-    </div>
-
-    <div class="viewer" id="viewer">
-      <div class="stage" id="stage">
-        <canvas id="canvas" width="512" height="512"></canvas>
-        <div class="hud mono" id="hudL"></div>
-        <div class="hud r mono" id="hudR"></div>
-      </div>
-      <div class="controls">
-        <div>
-          <div class="row" style="justify-content:space-between">
-            <span class="small muted">Slice <span class="mono" id="sliceLabel">–</span></span>
-            <span class="small muted">Scroll, drag the slider, or use ↑ ↓</span>
-          </div>
-          <input type="range" id="slider" min="0" max="0" value="0">
-        </div>
-        <div id="knownWrap" style="display:none">
-          <div class="small muted" style="margin-bottom:8px">Nodules marked by LIDC radiologists: click to analyse</div>
-          <div class="chips" id="known"></div>
-        </div>
-      </div>
-    </div>
-    <div class="overlay" id="loading"><div style="text-align:center"><div class="spinner"></div><div id="loadingText">Loading scan…</div></div></div>
-  </section>
-
-  <div class="side">
-    <section class="card">
-      <div class="card-head"><h2>How it works</h2></div>
-      <div class="card-body">
-        <ol class="steps" id="steps">
-          <li class="active"><span class="num">1</span><div><b>Upload a CT scan</b><div class="small">A chest CT as DICOM files, or try the sample.</div></div></li>
-          <li><span class="num">2</span><div><b>Click on the nodule</b><div class="small">Scroll to the slice where the nodule looks largest and click its centre.</div></div></li>
-          <li><span class="num">3</span><div><b>Analyse</b><div class="small">Five 3D neural networks look at a 48 mm cube around your point.</div></div></li>
-        </ol>
-        <div class="row" style="margin-top:18px">
-          <button class="btn primary" id="analyzeBtn" disabled>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            Analyse nodule
-          </button>
-          <span class="small muted mono" id="pointLabel"></span>
-        </div>
-      </div>
-    </section>
-
-    <section class="card result" id="result">
-      <div class="card-head"><h2>Result</h2><span class="small muted mono" id="resultAt"></span></div>
-      <div class="card-body">
-        <div class="gauge-wrap">
-          <div class="gauge">
-            <svg width="150" height="150" viewBox="0 0 150 150">
-              <circle cx="75" cy="75" r="62" fill="none" stroke="#1a2433" stroke-width="12"/>
-              <circle id="arc" cx="75" cy="75" r="62" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round"
-                      stroke-dasharray="389.56" stroke-dashoffset="389.56" style="transition: stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1), stroke .3s"/>
-            </svg>
-            <div class="val"><div><b id="probText">–</b><span>malignancy</span></div></div>
-          </div>
-          <div>
-            <span class="verdict" id="verdict">–</span>
-            <div class="small muted" id="verdictText"></div>
-          </div>
-        </div>
-        <div class="bars" id="bars"></div>
-        <div class="views">
-          <figure><img id="vAxial" alt="Axial view of the analysed region"><figcaption>Axial</figcaption></figure>
-          <figure><img id="vCoronal" alt="Coronal view of the analysed region"><figcaption>Coronal</figcaption></figure>
-          <figure><img id="vSagittal" alt="Sagittal view of the analysed region"><figcaption>Sagittal</figcaption></figure>
-        </div>
-        <div class="note" id="trainNote" style="display:none">This scan is part of LIDC-IDRI, which the models were trained on, so this score is optimistic.</div>
-      </div>
-    </section>
-
-    <section class="card" id="histCard" style="display:none">
-      <div class="card-head"><h2>Analysed in this scan</h2></div>
-      <div class="card-body"><div class="history" id="history"></div></div>
-    </section>
   </div>
+</section>
 
-  <p class="disclaimer">Research prototype trained on radiologists' malignancy ratings from the public LIDC-IDRI dataset, not on biopsy results.
-    It is not a medical device and must not be used for diagnosis.</p>
-</main>
-<div class="toast" id="toast"></div>
+<section class="block">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">Explore</span>
+      <h2>Three ways to use CADC</h2>
+      <p>Learn how lung cancer develops, see how the AI was built and tested, or try it on a CT scan.</p>
+    </div>
+    <div class="grid c3">
+      <a class="card feature reveal" href="/learn" style="color:inherit;text-decoration:none">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg></div>
+        <h3>Understand lung cancer</h3>
+        <p>An interactive 3D model shows the lungs, airways and how a tumour grows and spreads from stage I to IV.</p>
+      </a>
+      <a class="card feature reveal" href="/analyze" style="color:inherit;text-decoration:none">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></div>
+        <h3>Analyse a nodule</h3>
+        <p>Upload a chest CT, click on a nodule, and get a malignancy estimate from five models with a heatmap of their attention.</p>
+      </a>
+      <a class="card feature reveal" href="/model" style="color:inherit;text-decoration:none">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/></svg></div>
+        <h3>See how well it works</h3>
+        <p>ROC curves, learning curves and an honest look at accuracy, overfitting and limitations.</p>
+      </a>
+    </div>
+  </div>
+</section>
 
-<script>
-const $ = (id) => document.getElementById(id);
-const S = { scan: null, k: 0, win: "lung", point: null, cache: new Map(), history: [] };
-const canvas = $("canvas"), ctx = canvas.getContext("2d");
+<section class="block">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">How it works</span>
+      <h2>From a CT scan to an estimate in four steps</h2>
+    </div>
+    <div class="pipeline">
+      <div class="card reveal"><span class="n">01</span><h3>Scan</h3><p>A chest CT is a stack of hundreds of X-ray slices that together form a 3D image of the lungs.</p></div>
+      <div class="card reveal"><span class="n">02</span><h3>Focus</h3><p>A 48 mm cube around the nodule you select is cut out and resampled to 1 mm voxels.</p></div>
+      <div class="card reveal"><span class="n">03</span><h3>Analyse</h3><p>Five 3D convolutional neural networks each study the nodule's shape, edges and density.</p></div>
+      <div class="card reveal"><span class="n">04</span><h3>Explain</h3><p>Their votes are averaged, and a heatmap shows which regions drove the decision.</p></div>
+    </div>
+  </div>
+</section>
 
-function toast(msg) {
-  const t = $("toast"); t.textContent = msg; t.classList.add("on");
-  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 5000);
-}
-function loading(on, text) { $("loading").classList.toggle("on", on); if (text) $("loadingText").textContent = text; }
-async function api(url, opts) {
-  const r = await fetch(url, opts);
-  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); }
-  return r.json();
-}
-function fmtPct(p) { return p >= 0.995 ? ">99%" : p < 0.005 ? "<1%" : Math.round(p * 100) + "%"; }
-function colorFor(p) { return p >= 0.5 ? "var(--malignant)" : p >= 0.3 ? "var(--warn)" : "var(--benign)"; }
-function setStep(n) {
-  [...$("steps").children].forEach((li, i) => { li.className = i < n ? "done" : i === n ? "active" : ""; });
-}
+<section class="block">
+  <div class="container">
+    <div class="card reveal" style="padding:32px;display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center" id="ctaCard">
+      <div class="logo" style="width:60px;height:60px;border-radius:16px">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#060a12" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </div>
+      <div>
+        <h2 style="margin:0 0 6px;font-size:24px">Worried about a symptom or a scan result?</h2>
+        <p class="text-2" style="margin:0">This tool can't answer that, but a doctor can. See which symptoms mean you should get checked.</p>
+      </div>
+      <a class="btn primary" href="/learn#doctor">When to see a doctor</a>
+    </div>
+  </div>
+</section>
 
-// ---------- status ----------
-api("/api/status").then((s) => {
-  const ok = s.models > 0;
-  $("dot").className = "dot " + (ok ? "ok" : "bad");
-  $("statusText").textContent = ok ? `${s.models} models ready · ${s.device.toUpperCase()}` : "No trained models found";
-}).catch(() => { $("dot").className = "dot bad"; $("statusText").textContent = "Server offline"; });
-
-// ---------- upload ----------
-const drop = $("drop");
-["dragenter", "dragover"].forEach((e) => drop.addEventListener(e, (ev) => { ev.preventDefault(); drop.classList.add("over"); }));
-["dragleave", "drop"].forEach((e) => drop.addEventListener(e, (ev) => { ev.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", (ev) => upload(ev.dataTransfer.files));
-$("fileInput").addEventListener("change", (ev) => upload(ev.target.files));
-$("demoBtn").addEventListener("click", async (ev) => {
-  ev.preventDefault(); ev.stopPropagation();
-  loading(true, "Fetching sample scan (LIDC-IDRI-0001)… first time takes ~30 s");
-  try { openScan(await api("/api/demo", { method: "POST" })); } catch (e) { toast(e.message); } finally { loading(false); }
-});
-
-async function upload(files) {
-  if (!files || !files.length) return;
-  const fd = new FormData();
-  for (const f of files) fd.append("files", f);
-  loading(true, `Reading ${files.length} file${files.length > 1 ? "s" : ""}…`);
-  try { openScan(await api("/api/upload", { method: "POST", body: fd })); }
-  catch (e) { toast(e.message); } finally { loading(false); $("fileInput").value = ""; }
-}
-
-function openScan(info) {
-  S.scan = info; S.cache.clear(); S.point = null; S.history = [];
-  const [rows, cols, n] = info.shape;
-  canvas.width = cols; canvas.height = rows;
-  $("slider").max = n - 1;
-  $("uploader").style.display = "none"; $("viewer").classList.add("on"); $("viewerTools").style.display = "flex";
-  $("leftTitle").textContent = info.lidc ? `CT scan · ${info.lidc.patient_id}` : "CT scan";
-  $("hudR").innerHTML = `${cols}×${rows}×${n}<br>${info.spacing_mm[0]}×${info.spacing_mm[1]}×${info.spacing_mm[2]} mm`;
-  $("result").classList.remove("on"); $("histCard").style.display = "none"; renderHistory();
-  const known = info.lidc ? info.lidc.nodules : [];
-  $("knownWrap").style.display = known.length ? "block" : "none";
-  $("known").innerHTML = "";
-  known.forEach((nd, i) => {
-    const b = document.createElement("button"); b.className = "chip";
-    const mean = nd.ratings.length ? (nd.ratings.reduce((a, c) => a + c, 0) / nd.ratings.length).toFixed(1) : "–";
-    b.innerHTML = `Nodule ${i + 1} · <b>${nd.diameter_mm} mm</b> · rated ${mean}/5`;
-    b.onclick = () => { setPoint(nd.x, nd.y, nd.slice); analyze(); };
-    $("known").appendChild(b);
-  });
-  showSlice(known.length ? known[0].slice : Math.floor(n / 2));
-  setStep(1);
-}
-$("newScan").onclick = () => {
-  S.scan = null; $("viewer").classList.remove("on"); $("uploader").style.display = "block";
-  $("viewerTools").style.display = "none"; $("result").classList.remove("on"); $("histCard").style.display = "none";
-  $("analyzeBtn").disabled = true; $("pointLabel").textContent = ""; $("leftTitle").textContent = "CT scan"; setStep(0);
-};
-
-// ---------- viewer ----------
-function sliceImage(k) {
-  const key = `${S.win}:${k}`;
-  if (!S.cache.has(key)) {
-    const img = new Image();
-    img.src = `/api/scan/${S.scan.scan_id}/slice/${k}?window=${S.win}`;
-    S.cache.set(key, new Promise((res, rej) => { img.onload = () => res(img); img.onerror = rej; }));
-  }
-  return S.cache.get(key);
-}
-async function showSlice(k) {
-  const n = S.scan.shape[2];
-  k = Math.max(0, Math.min(n - 1, Math.round(k)));
-  S.k = k; $("slider").value = k; $("sliceLabel").textContent = `${k + 1} / ${n}`;
-  $("hudL").textContent = `Slice ${k + 1}`;
-  const img = await sliceImage(k);
-  if (S.k !== k) return;
-  draw(img);
-  [k + 1, k - 1, k + 2, k - 2].forEach((j) => j >= 0 && j < n && sliceImage(j));
-}
-function draw(img) {
-  ctx.drawImage(img, 0, 0);
-  const p = S.point;
-  if (!p) return;
-  const r = 22 / S.scan.spacing_mm[0];  // ~22 mm radius ring
-  const onSlice = Math.abs(p.slice - S.k) < 0.5;
-  ctx.save();
-  ctx.strokeStyle = onSlice ? "#4cc2ff" : "rgba(76,194,255,.35)";
-  ctx.lineWidth = Math.max(1.5, canvas.width / 300);
-  ctx.setLineDash(onSlice ? [] : [6, 6]);
-  ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(p.x - r * 1.5, p.y); ctx.lineTo(p.x - r * 0.4, p.y);
-  ctx.moveTo(p.x + r * 0.4, p.y); ctx.lineTo(p.x + r * 1.5, p.y);
-  ctx.moveTo(p.x, p.y - r * 1.5); ctx.lineTo(p.x, p.y - r * 0.4);
-  ctx.moveTo(p.x, p.y + r * 0.4); ctx.lineTo(p.x, p.y + r * 1.5);
-  ctx.stroke(); ctx.restore();
-}
-function redraw() { sliceImage(S.k).then(draw); }
-function setPoint(x, y, slice) {
-  S.point = { x, y, slice };
-  $("analyzeBtn").disabled = false;
-  $("pointLabel").textContent = `x ${Math.round(x)} · y ${Math.round(y)} · slice ${slice + 1}`;
-  setStep(2);
-  if (slice !== S.k) showSlice(slice); else redraw();
-}
-$("slider").addEventListener("input", (e) => showSlice(+e.target.value));
-$("stage").addEventListener("wheel", (e) => { e.preventDefault(); showSlice(S.k + Math.sign(e.deltaY)); }, { passive: false });
-window.addEventListener("keydown", (e) => {
-  if (!S.scan || e.target.tagName === "INPUT") return;
-  if (e.key === "ArrowUp") { e.preventDefault(); showSlice(S.k + 1); }
-  if (e.key === "ArrowDown") { e.preventDefault(); showSlice(S.k - 1); }
-  if (e.key === "Enter" && S.point) analyze();
-});
-canvas.addEventListener("click", (e) => {
-  const rect = canvas.getBoundingClientRect();
-  setPoint((e.clientX - rect.left) * canvas.width / rect.width, (e.clientY - rect.top) * canvas.height / rect.height, S.k);
-});
-$("windowSeg").addEventListener("click", (e) => {
-  const w = e.target.dataset.w; if (!w) return;
-  S.win = w; [...$("windowSeg").children].forEach((b) => b.classList.toggle("on", b.dataset.w === w)); showSlice(S.k);
-});
-
-// ---------- analyse ----------
-$("analyzeBtn").onclick = analyze;
-async function analyze() {
-  if (!S.point) return;
-  const p = S.point;
-  $("analyzeBtn").disabled = true;
-  loading(true, "Running 5 models…");
-  try {
-    const r = await api(`/api/scan/${S.scan.scan_id}/predict`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ x: p.x, y: p.y, slice: p.slice }),
-    });
-    showResult(r, p);
-    S.history.unshift({ ...r, point: { ...p } }); renderHistory();
-    setStep(3);
-  } catch (e) { toast(e.message); } finally { loading(false); $("analyzeBtn").disabled = false; }
-}
-function showResult(r, p) {
-  const el = $("result"); el.classList.remove("on"); void el.offsetWidth; el.classList.add("on");
-  const c = colorFor(r.probability);
-  $("probText").textContent = fmtPct(r.probability); $("probText").style.color = c;
-  const arc = $("arc"); arc.style.stroke = c;
-  arc.style.strokeDashoffset = 389.56;
-  requestAnimationFrame(() => requestAnimationFrame(() => { arc.style.strokeDashoffset = 389.56 * (1 - r.probability); }));
-  const mal = r.probability >= 0.5;
-  $("verdict").textContent = r.verdict; $("verdict").className = "verdict " + (mal ? "malignant" : "benign");
-  const agree = r.per_model.filter((v) => (v >= 0.5) === mal).length;
-  $("verdictText").innerHTML = `${agree} of ${r.per_model.length} models agree.<br>` +
-    (mal ? "Radiologists would likely rate this nodule as suspicious." : "Radiologists would likely rate this nodule as low suspicion.");
-  $("resultAt").textContent = `x ${Math.round(p.x)} · y ${Math.round(p.y)} · slice ${p.slice + 1}`;
-  $("bars").innerHTML = r.per_model.map((v, i) => `
-    <div class="bar"><span class="muted">Model ${i + 1}</span>
-      <div class="track"><div class="fill" style="background:${colorFor(v)}" data-w="${(v * 100).toFixed(1)}"></div></div>
-      <span class="mono" style="text-align:right">${fmtPct(v)}</span></div>`).join("");
-  requestAnimationFrame(() => requestAnimationFrame(() => document.querySelectorAll(".fill").forEach((f) => f.style.width = f.dataset.w + "%")));
-  $("vAxial").src = "data:image/png;base64," + r.views.axial;
-  $("vCoronal").src = "data:image/png;base64," + r.views.coronal;
-  $("vSagittal").src = "data:image/png;base64," + r.views.sagittal;
-  $("trainNote").style.display = r.in_training_data ? "block" : "none";
-}
-function renderHistory() {
-  $("histCard").style.display = S.history.length ? "block" : "none";
-  $("history").innerHTML = "";
-  S.history.forEach((h) => {
-    const d = document.createElement("div"); d.className = "hist";
-    const c = colorFor(h.probability);
-    d.innerHTML = `<span class="mono small">x ${Math.round(h.point.x)} · y ${Math.round(h.point.y)} · slice ${h.point.slice + 1}</span>
-      <span class="pill" style="color:${c};background:color-mix(in srgb, ${c} 14%, transparent)">${fmtPct(h.probability)}</span>`;
-    d.onclick = () => { S.point = { ...h.point }; showSlice(h.point.slice); redraw(); showResult(h, h.point); };
-    $("history").appendChild(d);
-  });
-}
+<div id="footer"></div>
+<style>@media (max-width: 760px) { #ctaCard { grid-template-columns: 1fr !important; } }</style>
+<script src="/static/js/common.js"></script>
+<script type="module">
+  import { createLungs } from "/static/js/lungs3d.js";
+  document.getElementById("heroWarn").innerHTML = CADC.warnIcon;
+  createLungs(document.getElementById("hero3d"), { hotspots: false, zoom: false, stage: 1, distance: 0.86 });
+  // Fill the stat tiles from the real evaluation results when they exist.
+  fetch("/api/metrics").then((r) => r.ok ? r.json() : null).then((m) => {
+    if (!m) return;
+    const set = (k, v) => { const el = document.querySelector(`[data-k="${k}"]`); if (el) el.textContent = v; };
+    set("auc", m.nodule_level.auc.toFixed(2));
+    set("acc", Math.round(m.nodule_level.accuracy * 100) + "%");
+    set("nodules", m.dataset.nodules.toLocaleString("en"));
+    set("scans", m.dataset.scans.toLocaleString("en"));
+  }).catch(() => {});
 </script>
 </body>
 </html>

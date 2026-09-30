@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Understanding Lung Cancer</title>
+<meta name="description" content="What lung cancer is, how it grows and spreads, its risk factors and symptoms, and when to see a doctor, with an interactive 3D model.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234cc2ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%23060a12' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+<script type="importmap">{ "imports": { "three": "/static/vendor/three.module.min.js" } }</script>
+<style>
+  .explorer { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 20px; }
+  .explorer .viewport { height: 640px; overflow: hidden; }
+  .explorer .side { display: grid; gap: 16px; align-content: start; }
+  #info h3 { margin: 6px 0 8px; font-size: 20px; }
+  #info p { margin: 0; color: var(--text-2); }
+  .stage-desc h3 { margin: 4px 0 6px; font-size: 18px; }
+  .stage-desc p { margin: 0; color: var(--text-2); font-size: 15px; }
+  .surv { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; }
+  .surv b { font-size: 26px; }
+  @media (max-width: 980px) { .explorer { grid-template-columns: 1fr; } .explorer .viewport { height: 480px; } }
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .toc a { font-size: 14px; }
+  .card.pad { padding: 24px; }
+  .symptom { display: flex; gap: 12px; align-items: flex-start; }
+  .symptom .ic { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: rgba(255, 122, 184, .1); color: var(--accent-3); border: 1px solid rgba(255, 122, 184, .25); }
+  .symptom h4 { margin: 0 0 2px; font-size: 15.5px; }
+  .symptom p { margin: 0; color: var(--text-2); font-size: 14.5px; }
+  .sources li { color: var(--muted); font-size: 14px; margin: 6px 0; }
+</style>
+</head>
+<body data-page="learn">
+<div id="nav"></div>
+
+<header class="page-hero">
+  <div class="container reveal">
+    <span class="eyebrow">Learn</span>
+    <h1>Understanding <span class="grad-text">lung cancer</span></h1>
+    <p>How the lungs work, what happens when cancer develops, how it is staged, and what you can do. Explore the 3D model, then read on.</p>
+    <div class="toc">
+      <a class="pill" href="#explore">3D explorer</a><a class="pill" href="#what">What is it?</a><a class="pill" href="#types">Types</a>
+      <a class="pill" href="#risk">Risk factors</a><a class="pill" href="#symptoms">Symptoms</a><a class="pill" href="#nodules">Lung nodules</a>
+      <a class="pill" href="#stages">Stages</a><a class="pill" href="#diagnosis">Diagnosis &amp; treatment</a><a class="pill" href="#doctor">When to see a doctor</a>
+    </div>
+  </div>
+</header>
+
+<section class="block" id="explore" style="padding-top:28px">
+  <div class="container">
+    <div class="explorer">
+      <div class="card viewport reveal"><div class="stage3d" id="lungs3d" aria-label="Interactive 3D model of the lungs; choose a stage to see a tumour grow and spread"></div></div>
+      <div class="side">
+        <div class="card card-body reveal">
+          <div class="small muted" style="margin-bottom:10px">Choose a stage to see how the cancer changes</div>
+          <div class="stages" id="stageBtns" role="tablist">
+            <button data-s="0">Healthy</button><button data-s="1">I</button><button data-s="2">II</button><button data-s="3">III</button><button data-s="4">IV</button>
+          </div>
+          <div class="stage-desc" id="stageDesc" style="margin-top:16px" aria-live="polite"></div>
+        </div>
+        <div class="card card-body reveal" id="info" aria-live="polite">
+          <span class="tag">Tip</span>
+          <h3>Click a label on the model</h3>
+          <p>Drag to rotate and scroll to zoom. Each glowing point explains a part of the lungs.</p>
+        </div>
+      </div>
+    </div>
+    <p class="tiny muted" style="margin-top:12px">Simplified illustration for education, not to anatomical scale. Shown as if the person is facing you: their right lung is on your left.</p>
+  </div>
+</section>
+
+<section class="block" id="what">
+  <div class="container grid c2" style="align-items:start">
+    <div class="section-head reveal" style="margin:0">
+      <span class="eyebrow">The basics</span>
+      <h2>What is lung cancer?</h2>
+      <p>Lung cancer starts when cells in the lung begin to grow out of control, usually in the lining of the airways.
+        Over time they can form a mass (a tumour), invade nearby tissue, and spread through the lymph system or the blood to other parts of the body.</p>
+    </div>
+    <div class="grid c2">
+      <div class="card stat reveal"><div class="v grad-text">~2.5M</div><div class="l">new cases worldwide in 2022, the most common cancer</div></div>
+      <div class="card stat reveal"><div class="v grad-text">~1.8M</div><div class="l">deaths in 2022, the leading cause of cancer death</div></div>
+      <div class="card stat reveal"><div class="v">~85%</div><div class="l">of lung cancers are non-small cell lung cancer</div></div>
+      <div class="card stat reveal"><div class="v">Early</div><div class="l">detection greatly improves the chance of successful treatment</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="types">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">Types</span><h2>The two main kinds</h2>
+      <p>Doctors group lung cancers by how the cells look under a microscope, because that changes how they behave and how they are treated.</p></div>
+    <div class="grid c2">
+      <div class="card pad prose reveal">
+        <span class="tag">About 85%</span>
+        <h3 style="margin-top:12px">Non-small cell lung cancer (NSCLC)</h3>
+        <p>The most common kind. It usually grows more slowly. Main subtypes:</p>
+        <ul>
+          <li><b>Adenocarcinoma</b>: the most common subtype, often in the outer parts of the lung. It is also the most common type in people who have never smoked.</li>
+          <li><b>Squamous cell carcinoma</b>: usually in the central airways, strongly linked to smoking.</li>
+          <li><b>Large cell carcinoma</b>: can appear anywhere in the lung and tends to grow quickly.</li>
+        </ul>
+      </div>
+      <div class="card pad prose reveal">
+        <span class="tag" style="color:var(--accent-3);background:rgba(255,122,184,.1);border-color:rgba(255,122,184,.3)">About 15%</span>
+        <h3 style="margin-top:12px">Small cell lung cancer (SCLC)</h3>
+        <p>Less common but more aggressive. It grows fast and often has already spread by the time it is found, so it is usually treated with
+          chemotherapy, radiotherapy and immunotherapy rather than surgery. It is almost always linked to smoking.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="risk">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">Risk factors</span><h2>What raises the risk?</h2>
+      <p>Anyone can get lung cancer, including people who have never smoked. These factors make it more likely:</p></div>
+    <div class="grid c3" id="riskGrid"></div>
+  </div>
+</section>
+
+<section class="block" id="symptoms">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">Symptoms</span><h2>Signs to watch for</h2>
+      <p>Early lung cancer often causes <b>no symptoms at all</b>, which is why it is often found late, or by chance on a scan done for another reason.
+        When symptoms do appear, they can include:</p></div>
+    <div class="grid c3" id="symptomGrid"></div>
+    <p class="small muted reveal" style="margin-top:18px">These symptoms are much more often caused by other, less serious conditions, such as infections. Only a doctor can find the cause.</p>
+  </div>
+</section>
+
+<section class="block" id="nodules">
+  <div class="container grid c2" style="align-items:center">
+    <div class="section-head reveal" style="margin:0">
+      <span class="eyebrow">Lung nodules</span>
+      <h2>A "spot on the lung" is usually not cancer</h2>
+      <p>A lung nodule is a small, roundish spot, up to 3 cm across, seen on a chest scan. Nodules are very common, and the <b>large majority are benign</b>:
+        scars from old infections, small inflamed areas, or harmless growths.</p>
+      <p style="margin-top:12px">Doctors decide what to do from the nodule's size, shape, density and growth, together with your personal risk factors.
+        Often the next step is simply a repeat scan after some months to check whether it has changed.</p>
+    </div>
+    <div class="card pad reveal">
+      <h3 style="margin:0 0 14px;font-size:17px">What radiologists look at, and what this AI learned</h3>
+      <ul class="list-check">
+        <li><span><b>Size</b>: larger nodules are more likely to be cancer.</span></li>
+        <li><span><b>Edges</b>: spiky ("spiculated") or irregular edges are more suspicious than smooth, round ones.</span></li>
+        <li><span><b>Density</b>: solid, part-solid or "ground-glass"; each carries a different level of concern.</span></li>
+        <li><span><b>Growth</b>: a nodule that grows between scans is more worrying than one that stays the same for years.</span></li>
+        <li><span><b>Calcium</b>: certain calcification patterns usually mean a harmless nodule.</span></li>
+      </ul>
+      <a class="btn primary" style="margin-top:18px" href="/analyze">Try the nodule analyser</a>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="stages">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">Staging</span><h2>How far has it spread?</h2>
+      <p>The stage describes the tumour's size and how far it has spread. It is the most important factor in choosing treatment and in the outlook.
+        Survival rates below are broad US averages for non-small cell lung cancer; every person's situation is different.</p></div>
+    <div class="card pad reveal" id="stageTable"></div>
+    <p class="tiny muted" style="margin-top:10px">5-year relative survival from the American Cancer Society (SEER data), grouped as localised / regional / distant.
+      Treatments are improving, so recent outcomes may be better than these figures.</p>
+  </div>
+</section>
+
+<section class="block" id="diagnosis">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">Diagnosis &amp; treatment</span><h2>From a suspicious scan to a plan</h2></div>
+    <div class="grid c3">
+      <div class="card pad prose reveal"><h3>Screening</h3>
+        <p>Low-dose CT screening can find lung cancer early in people at high risk. In the US, yearly screening is recommended for adults aged 50–80
+          with a heavy smoking history (20 pack-years or more) who smoke now or quit within the past 15 years. Rules differ by country, so ask your doctor.</p></div>
+      <div class="card pad prose reveal"><h3>Diagnosis</h3>
+        <p>A suspicious nodule may lead to further imaging (such as PET-CT) and a <b>biopsy</b>, where a small tissue sample is examined.
+          Only a biopsy can confirm cancer. Tests on the tissue also look for gene changes that guide treatment.</p></div>
+      <div class="card pad prose reveal"><h3>Treatment</h3>
+        <p>Depending on the type and stage: <b>surgery</b>, <b>radiotherapy</b>, <b>chemotherapy</b>, <b>targeted therapy</b> (for tumours with specific gene changes)
+          and <b>immunotherapy</b>, often combined. A team of specialists plans it together with the patient.</p></div>
+    </div>
+    <div class="card pad reveal" style="margin-top:20px">
+      <h3 style="margin:0 0 12px;font-size:18px">Lowering your risk</h3>
+      <div class="grid c2">
+        <ul class="list-check">
+          <li><span><b>Don't smoke, or stop.</b> Quitting at any age lowers the risk, and help such as counselling and medicines makes it more likely to succeed.</span></li>
+          <li><span><b>Avoid second-hand smoke</b> at home and at work.</span></li>
+          <li><span><b>Test your home for radon</b> where it is common, and fix high levels.</span></li>
+        </ul>
+        <ul class="list-check">
+          <li><span><b>Reduce smoke and fumes indoors</b>: ventilate when cooking, especially with wood, coal or other solid fuels.</span></li>
+          <li><span><b>Follow workplace safety rules</b> around asbestos, silica, diesel exhaust and other chemicals.</span></li>
+          <li><span><b>Ask about screening</b> if you are at high risk.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="doctor">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">Get help</span><h2>When to see a doctor</h2>
+      <p>No website or AI can check your health. If something worries you, see a doctor. It is always OK to ask.</p></div>
+    <div class="alert danger reveal" style="margin-bottom:20px">
+      <span id="dangerIcon"></span>
+      <div><b>Get emergency help now</b> (e.g. 112 in India and Europe, 911 in the US) if you cough up more than a little blood, have severe difficulty breathing,
+        or have sudden severe chest pain.</div>
+    </div>
+    <div class="grid c2">
+      <div class="card pad reveal">
+        <h3 style="margin:0 0 12px;font-size:18px">Book an appointment with your doctor if you have</h3>
+        <ul class="list-check">
+          <li><span>A cough that lasts more than 3 weeks, or a long-standing cough that changes</span></li>
+          <li><span>Any blood in what you cough up</span></li>
+          <li><span>Breathlessness, chest pain or hoarseness that doesn't go away</span></li>
+          <li><span>Chest infections that keep coming back</span></li>
+          <li><span>Weight loss or tiredness you can't explain</span></li>
+        </ul>
+      </div>
+      <div class="card pad reveal">
+        <h3 style="margin:0 0 12px;font-size:18px">If you've been told you have a lung nodule</h3>
+        <ul class="list-check">
+          <li><span>Keep every follow-up scan appointment, even if you feel well.</span></li>
+          <li><span>Ask what size and type it is, and what the plan is.</span></li>
+          <li><span>Tell your doctor about smoking, workplace exposures and family history.</span></li>
+          <li><span>Bring earlier scans if you have them: comparing them shows growth.</span></li>
+          <li><span>Don't use AI tools, including this one, to decide whether to follow medical advice.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" style="padding-top:20px">
+  <div class="container">
+    <details class="more card pad">
+      <summary>Sources for this page</summary>
+      <ul class="sources">
+        <li>World Health Organization / IARC, GLOBOCAN 2022: global cancer statistics.</li>
+        <li>American Cancer Society: Lung cancer survival rates, types, risk factors and symptoms.</li>
+        <li>US Preventive Services Task Force (2021): Lung cancer screening recommendation.</li>
+        <li>US National Cancer Institute: Non-small cell and small cell lung cancer treatment (PDQ).</li>
+      </ul>
+      <p class="tiny muted">General education only, written for a broad audience; it may not reflect the latest guidance in your country.</p>
+    </details>
+  </div>
+</section>
+
+<div id="footer"></div>
+<script src="/static/js/common.js"></script>
+<script type="module">
+  import { createLungs } from "/static/js/lungs3d.js";
+  const $ = (id) => document.getElementById(id);
+  $("dangerIcon").innerHTML = CADC.warnIcon;
+
+  const PARTS = {
+    trachea: ["Trachea (windpipe)", "The main airway. Rings of cartilage keep it open as air flows from the throat down to the lungs. At its lower end it splits into the two main bronchi."],
+    bronchi: ["Bronchi", "The airways branch again and again, like an upside-down tree, into ever smaller tubes called bronchioles. Many lung cancers start in the cells lining these airways."],
+    right: ["Right lung", "The larger lung, divided into three lobes (upper, middle and lower). Lung cancer is somewhat more common in the upper lobes."],
+    left: ["Left lung", "Slightly smaller, with two lobes, leaving room for the heart in a hollow called the cardiac notch."],
+    alveoli: ["Alveoli (air sacs)", "About 300–500 million tiny sacs where oxygen passes into the blood and carbon dioxide leaves it. Shown here as glowing points."],
+    tumour: ["Tumour", "A mass of cells growing out of control. On a CT scan an early tumour can look like a small nodule. Irregular, spiky edges and growth over time are warning signs."],
+    nodes: ["Lymph nodes", "Small glands that filter lymph fluid. Cancer cells often reach the lymph nodes near the lung first (stage II), then those in the centre of the chest (stage III). They light up orange when affected."],
+    spread: ["Metastasis", "In stage IV, cancer cells travel through the blood or lymph to the other lung or to distant organs, most often the brain, bones, liver and adrenal glands."],
+  };
+  const STAGE_INFO = [
+    ["Healthy lungs", "Air flows down the trachea and branching bronchi into millions of tiny air sacs, where oxygen enters the blood.", null],
+    ["Stage I: small and local", "A small tumour (up to about 4 cm) that has not spread to any lymph nodes. Often curable with surgery or targeted radiotherapy.", "~65%"],
+    ["Stage II: larger, or nearby nodes", "The tumour is larger, or cancer has reached lymph nodes near the lung (at the hilum), shown in orange.", "~37%"],
+    ["Stage III: centre of the chest", "Cancer has spread to lymph nodes in the middle of the chest (mediastinum) or into nearby structures. Usually treated with a combination of therapies.", "~37%"],
+    ["Stage IV: spread through the body", "Cancer has spread to the other lung, the lining around the lungs or heart, or distant organs such as the brain, bones or liver. Treatment aims to control it and relieve symptoms, and newer therapies have improved outlooks.", "~9%"],
+  ];
+
+  const viewer = createLungs($("lungs3d"), {
+    stage: 1,
+    onSelect(id) {
+      if (!id) return;
+      const [t, d] = PARTS[id];
+      $("info").innerHTML = `<span class="tag">Anatomy</span><h3>${t}</h3><p>${d}</p>`;
+    },
+  });
+  function showStage(s) {
+    viewer.setStage(s);
+    [...$("stageBtns").children].forEach((b) => { const on = +b.dataset.s === s; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+    const [t, d, surv] = STAGE_INFO[s];
+    $("stageDesc").innerHTML = `<h3>${t}</h3><p>${d}</p>` +
+      (surv ? `<div class="surv"><b class="grad-text">${surv}</b><span class="small muted">of people are alive 5 years after diagnosis (US average; ${s === 1 ? "localised" : s === 4 ? "distant" : "regional"})</span></div>` : "");
+  }
+  $("stageBtns").addEventListener("click", (e) => { const s = e.target.dataset.s; if (s !== undefined) showStage(+s); });
+  showStage(1);
+
+  const RISKS = [
+    ["Smoking", "By far the biggest cause: most lung cancers are linked to smoking. The risk rises with how much and how long someone smokes, and falls after quitting."],
+    ["Second-hand smoke", "Breathing other people's smoke regularly raises the risk, even for people who have never smoked."],
+    ["Air pollution", "Outdoor pollution and indoor smoke from cooking or heating with wood, coal or other solid fuels."],
+    ["Radon", "A natural radioactive gas from the ground that can build up indoors. A leading cause in non-smokers in some regions."],
+    ["Workplace exposures", "Asbestos, silica, diesel exhaust, arsenic, chromium and some other chemicals."],
+    ["Family &amp; health history", "Lung cancer in a close relative, earlier chest radiotherapy, and lung diseases such as COPD, pulmonary fibrosis or scarring from tuberculosis."],
+  ];
+  $("riskGrid").innerHTML = RISKS.map(([t, d]) => `<div class="card feature reveal in"><h3>${t}</h3><p>${d}</p></div>`).join("");
+
+  const ICON = (p) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  const SYMPTOMS = [
+    ["A cough that won't go away", "Lasting more than 3 weeks, or a long-standing cough that changes.", '<path d="M3 12h4l3-8 4 16 3-8h4"/>'],
+    ["Coughing up blood", "Even small amounts, or rust-coloured phlegm.", '<path d="M12 2.7s6 6.3 6 11.3a6 6 0 0 1-12 0c0-5 6-11.3 6-11.3z"/>'],
+    ["Shortness of breath", "Getting breathless doing things that used to be easy.", '<path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 12h15a3 3 0 1 1-3 3"/><path d="M3 16h7"/>'],
+    ["Chest or shoulder pain", "Pain that is worse when breathing deeply, coughing or laughing.", '<path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/>'],
+    ["Hoarse voice", "A change in your voice that lasts more than a few weeks.", '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>'],
+    ["Weight loss &amp; tiredness", "Losing weight without trying, low appetite, feeling very tired, or repeated chest infections.", '<path d="M12 3v18"/><path d="m5 10 7 7 7-7"/>'],
+  ];
+  $("symptomGrid").innerHTML = SYMPTOMS.map(([t, d, p]) =>
+    `<div class="card feature symptom reveal in"><span class="ic">${ICON(p)}</span><div><h4>${t}</h4><p>${d}</p></div></div>`).join("");
+
+  const STAGE_ROWS = [
+    ["Stage I", "Localised", "A small tumour only in the lung, with no lymph nodes involved.", "~65%"],
+    ["Stage II", "Regional", "A larger tumour, or spread to lymph nodes next to the lung.", "~37%"],
+    ["Stage III", "Regional", "Spread to lymph nodes in the centre of the chest, or into nearby structures.", "~37%"],
+    ["Stage IV", "Distant", "Spread to the other lung, fluid around the lung or heart, or distant organs.", "~9%"],
+  ];
+  $("stageTable").innerHTML = STAGE_ROWS.map(([s, g, d, v]) => `
+    <div class="stage-row"><div><b class="s">${s}</b><div class="tiny muted">${g}</div></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap">
+        <span class="text-2">${d}</span><span class="pill"><b style="color:var(--text)">${v}</b>&nbsp;5-year survival</span></div></div>`).join("");
+</script>
+</body>
+</html>

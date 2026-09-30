@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About CADC</title>
+<meta name="description" content="About the CADC research project: FAQ, privacy, disclaimer and credits.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234cc2ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%23060a12' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+  .faq { display: grid; gap: 12px; }
+  .faq details { border: 1px solid var(--border); border-radius: 14px; background: var(--panel); padding: 0 20px; transition: border-color .2s; }
+  .faq details[open] { border-color: var(--border-strong); }
+  .faq summary { cursor: pointer; list-style: none; padding: 18px 0; font-weight: 600; display: flex; justify-content: space-between; gap: 16px; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; color: var(--accent); font-size: 20px; line-height: 1; transition: transform .2s; }
+  .faq details[open] summary::after { transform: rotate(45deg); }
+  .faq p { margin: 0 0 18px; color: var(--text-2); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+  .card.pad { padding: 24px; }
+  .card.pad h3 { margin: 0 0 10px; font-size: 18px; }
+  .card.pad p { color: var(--text-2); margin: 0 0 10px; }
+  code.cite { display: block; padding: 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); font-family: var(--mono); font-size: 12.5px; color: var(--text-2); white-space: pre-wrap; }
+</style>
+</head>
+<body data-page="about">
+<div id="nav"></div>
+
+<header class="page-hero">
+  <div class="container reveal">
+    <span class="eyebrow">About</span>
+    <h1>About <span class="grad-text">CADC</span></h1>
+    <p>CADC (computer-aided detection and characterisation) is a student research project exploring how 3D deep learning can help describe lung nodules on CT.</p>
+  </div>
+</header>
+
+<section class="block" style="padding-top:20px">
+  <div class="container two">
+    <div class="card pad reveal" id="disclaimer">
+      <h3>Medical disclaimer</h3>
+      <p>CADC is an artificial-intelligence research prototype. It is <b>not a medical device</b>, has not been reviewed or approved by any regulator,
+        and has not been clinically validated.</p>
+      <p>Its output is an automated estimate of how radiologists in one research dataset might rate a nodule's appearance. It <b>cannot diagnose or rule out
+        cancer</b> or any other disease, and it can be wrong.</p>
+      <p>Always seek the advice of a qualified doctor about any medical question, scan or symptom. Never disregard or delay professional advice because of
+        something shown here. In an emergency, contact your local emergency number (for example 112 in India and Europe, 911 in the US).</p>
+      <button class="btn sm" data-consent>Review the disclaimer I accepted</button>
+    </div>
+    <div class="card pad reveal" id="privacy">
+      <h3>Privacy</h3>
+      <p><b>Your scans stay on this computer.</b> The analyser runs locally: uploaded files are processed by a program on your own machine,
+        kept in memory only while you use them, and never sent to an external server.</p>
+      <p>The only internet requests are for web fonts and, if you click "Try a sample scan", a one-time download of a public research scan from The Cancer Imaging Archive.</p>
+      <p>DICOM files can contain personal information such as names and dates of birth. The app does not display or store it, but take care when sharing scans or reports.</p>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="faq">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">FAQ</span><h2>Frequently asked questions</h2></div>
+    <div class="faq reveal">
+      <details open><summary>Can this tell me whether I have lung cancer?</summary>
+        <p>No. Only a doctor can diagnose cancer, usually with a biopsy. This model estimates how suspicious a nodule <i>looks</i> to radiologists in a research dataset.
+          A high score does not mean cancer, and a low score does not rule it out.</p></details>
+      <details><summary>What does the percentage mean?</summary>
+        <p>It is the average of five models' estimates that radiologists would rate the nodule as likely malignant (an average rating of 3.5 or more out of 5).
+          It is a model score, not a medical probability for you. Below 30% is shown as low suspicion, 30–70% intermediate, and above 70% high.</p></details>
+      <details><summary>How accurate is it?</summary>
+        <p>On patients it never saw, it separates nodules that radiologists rated malignant from benign ones with an AUC of about 0.92 and about 87% accuracy.
+          The <a href="/model">model page</a> has the full results and limitations. Real-world accuracy on other hospitals' scans is likely to be lower.</p></details>
+      <details><summary>What is the orange "AI attention" heatmap?</summary>
+        <p>A Grad-CAM map: it highlights the parts of the 3D cube that most pushed the models towards "malignant". It shows where the model looked, not proof of disease,
+          and it is sometimes drawn to surrounding structures rather than the nodule itself.</p></details>
+      <details><summary>Why do I have to click on the nodule myself?</summary>
+        <p>This model classifies nodules; it does not search for them. Finding nodules automatically needs a separate detection model, which is a possible next step for this project.</p></details>
+      <details><summary>What kind of scan can I upload?</summary>
+        <p>A chest CT scan in DICOM format: a .zip of one series, or all the .dcm files of that series. Thin slices (1–2.5 mm) work best. X-rays, MRI, photos and PDFs will not work.</p></details>
+      <details><summary>Why does it say my LIDC-IDRI scan is in the training data?</summary>
+        <p>The models learned from the LIDC-IDRI dataset, so scores on those scans are optimistic. Honest performance figures, measured only on unseen patients,
+          are on the <a href="/model">model page</a>.</p></details>
+      <details><summary>I'm worried about my lungs. What should I do?</summary>
+        <p>Please talk to a doctor. The <a href="/learn#doctor">when to see a doctor</a> section lists symptoms that should be checked, and when to seek emergency help.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="container two">
+    <div class="card pad reveal">
+      <h3>Built with</h3>
+      <p>PyTorch (3D ResNet, trained on a laptop GPU) · pylidc and pydicom (data) · FastAPI (local server) · Three.js (3D lung model) · hand-written SVG charts.
+        Source code: <a href="https://github.com/Dhir-learner/CAD-C">github.com/Dhir-learner/CAD-C</a>.</p>
+    </div>
+    <div class="card pad reveal">
+      <h3>Data credit</h3>
+      <p>Trained on LIDC-IDRI, provided by The Cancer Imaging Archive under CC BY 3.0. Thanks to the radiologists and patients who made it possible.</p>
+      <code class="cite">Armato SG III, McLennan G, Bidaut L, et al. The Lung Image Database Consortium (LIDC) and Image Database Resource Initiative (IDRI):
+a completed reference database of lung nodules on CT scans. Medical Physics 38(2):915–931, 2011.</code>
+    </div>
+  </div>
+</section>
+
+<div id="footer"></div>
+<script src="/static/js/common.js"></script>
+</body>
+</html>

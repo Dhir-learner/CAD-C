@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the Model Works</title>
+<meta name="description" content="How the CADC 3D CNN was built, trained and evaluated, with ROC and learning curves.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234cc2ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%23060a12' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+  .chart-card { padding: 22px; }
+  .chart-card h3 { margin: 0; font-size: 17px; }
+  .chart-card .sub { color: var(--muted); font-size: 14px; margin: 4px 0 14px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .chart-tip { position: absolute; display: none; pointer-events: none; background: #0c131d; border: 1px solid var(--border-strong); border-radius: 10px;
+    padding: 9px 12px; font-size: 12.5px; line-height: 1.55; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); white-space: nowrap; z-index: 3; color: var(--text); }
+  .arch { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; align-items: stretch; }
+  .arch div { padding: 14px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); text-align: center; font-size: 13px; color: var(--text-2); position: relative; }
+  .arch b { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
+  .arch div:not(:last-child)::after { content: "→"; position: absolute; right: -10px; top: 50%; transform: translate(50%, -50%); color: var(--muted); }
+  @media (max-width: 900px) { .arch { grid-template-columns: repeat(2, 1fr); } .arch div::after { display: none; } }
+  .kv { display: grid; grid-template-columns: 180px 1fr; gap: 8px 16px; font-size: 15px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; color: var(--text-2); }
+  @media (max-width: 560px) { .kv { grid-template-columns: 1fr; } .kv dd { margin-bottom: 8px; } }
+</style>
+</head>
+<body data-page="model">
+<div id="nav"></div>
+
+<header class="page-hero">
+  <div class="container reveal">
+    <span class="eyebrow">The model</span>
+    <h1>How well does it <span class="grad-text">actually work?</span></h1>
+    <p>Every number on this page comes from patients the models never saw during training, using 5-fold cross-validation split by patient.</p>
+  </div>
+</header>
+
+<section class="block" style="padding-top:20px">
+  <div class="container">
+    <div class="grid c3 needs-metrics">
+      <div class="card stat reveal"><div class="v grad-text" id="mAuc">–</div><div class="l">Nodule-level AUC · <span id="mAucCi"></span></div></div>
+      <div class="card stat reveal"><div class="v" id="mAcc">–</div><div class="l">Accuracy at a 50% threshold</div></div>
+      <div class="card stat reveal"><div class="v" id="mPAuc">–</div><div class="l">Patient-level AUC (most suspicious nodule)</div></div>
+      <div class="card stat reveal"><div class="v" id="mSens">–</div><div class="l">Sensitivity: malignant nodules caught</div></div>
+      <div class="card stat reveal"><div class="v" id="mSpec">–</div><div class="l">Specificity: benign nodules correctly cleared</div></div>
+      <div class="card stat reveal"><div class="v">5</div><div class="l">Models in the ensemble (one per fold)</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" style="padding-top:12px">
+  <div class="container grid c2" style="align-items:start">
+    <div class="card chart-card reveal">
+      <h3>ROC curve</h3>
+      <p class="sub">How many malignant nodules are caught (up) for each rate of false alarms (right). A perfect model hugs the top-left corner.</p>
+      <div class="legend"><span><i class="sw" style="background:#3987e5"></i>Nodule level</span><span><i class="sw" style="background:#d95926"></i>Patient level</span></div>
+      <div id="rocChart" class="needs-metrics"></div>
+      <details class="more"><summary>Show as a table</summary><table class="data" id="rocTable"></table></details>
+    </div>
+    <div class="card chart-card reveal">
+      <h3>Is it overfitting?</h3>
+      <p class="sub" id="fitText">Loading…</p>
+      <div id="aucChart" class="needs-metrics"></div>
+      <p class="tiny muted" style="margin:6px 0 14px">Blue: mean of the 5 folds. Thin grey lines: individual folds.</p>
+      <div id="lossChart"></div>
+      <details class="more"><summary>Show as a table</summary><table class="data" id="curveTable"></table></details>
+    </div>
+  </div>
+</section>
+
+<section class="block" style="padding-top:12px">
+  <div class="container">
+    <div class="card chart-card reveal">
+      <h3>Results per fold</h3>
+      <p class="sub">Each fold's model is tested on a different fifth of the patients; the spread shows how stable the results are.</p>
+      <table class="data" id="foldTable"></table>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">Architecture</span><h2>A 3D ResNet with 8.3 million parameters</h2>
+      <p>The network reads the nodule as a true 3D volume, so it can learn its shape in every direction, not just one slice.</p></div>
+    <div class="arch reveal">
+      <div><b>Input</b>48×48×48 mm cube, 1 mm voxels</div>
+      <div><b>Stem</b>3D conv, 32 filters</div>
+      <div><b>Stage 1–2</b>Residual blocks, 32→64 filters</div>
+      <div><b>Stage 3–4</b>Residual blocks, 128→256 filters</div>
+      <div><b>Pooling</b>Global average + dropout</div>
+      <div><b>Output</b>Probability of "malignant"</div>
+    </div>
+    <div class="grid c2" style="margin-top:24px">
+      <div class="card card-body reveal">
+        <h3 style="margin:0 0 14px;font-size:17px">Data</h3>
+        <dl class="kv">
+          <dt>Dataset</dt><dd>LIDC-IDRI (The Cancer Imaging Archive), <span id="dsScans">1,018</span> CT scans</dd>
+          <dt>Nodules used</dt><dd><span id="dsNodules">–</span> nodules from <span id="dsPatients">–</span> patients, <span id="dsMal">–</span> malignant</dd>
+          <dt>Labels</dt><dd>Up to 4 radiologists rated each nodule 1–5. Mean ≤ 2.5 = benign, ≥ 3.5 = malignant; unclear nodules (in between) left out.</dd>
+          <dt>Pre-processing</dt><dd>Resampled to 1 mm, clipped to −1000…400 Hounsfield units, 64 mm cube around each nodule.</dd>
+        </dl>
+      </div>
+      <div class="card card-body reveal">
+        <h3 style="margin:0 0 14px;font-size:17px">Training</h3>
+        <dl class="kv">
+          <dt>Validation</dt><dd>5-fold cross-validation, grouped by patient so no patient is in both training and testing</dd>
+          <dt>Augmentation</dt><dd>Random 3D crops, flips and 90° rotations</dd>
+          <dt>Optimisation</dt><dd>AdamW, cosine learning-rate schedule, 60 epochs, class-balanced loss, mixed precision</dd>
+          <dt>Hardware</dt><dd>One laptop GPU (RTX 4050, 6 GB): about 20 minutes per fold</dd>
+          <dt>Explainability</dt><dd>Grad-CAM heatmaps averaged over the 5 models</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="container">
+    <div class="section-head reveal"><span class="eyebrow">Limitations</span><h2>What the numbers don't tell you</h2></div>
+    <div class="grid c2">
+      <div class="card feature reveal"><h3>Labels are opinions, not biopsies</h3><p>The model learned to predict what radiologists would think about a nodule, not confirmed diagnoses. Its ceiling is their agreement with each other.</p></div>
+      <div class="card feature reveal"><h3>One dataset, one era</h3><p>LIDC-IDRI scans come from a few US institutions in the 2000s. Scanners, protocols and populations elsewhere differ, and performance may drop there.</p></div>
+      <div class="card feature reveal"><h3>You point, it classifies</h3><p>It does not search the scan for nodules. A missed nodule gets no score, and a click on something that is not a nodule still gets one.</p></div>
+      <div class="card feature reveal"><h3>No history, no growth</h3><p>Doctors use growth over time, symptoms, smoking history and other tests. The model sees one 48 mm cube from one scan.</p></div>
+    </div>
+    <div class="alert reveal" style="margin-top:22px"><span id="limWarn"></span>
+      <div><b>Not clinically validated.</b> It must not be used for diagnosis or treatment decisions. Always consult a doctor.</div></div>
+  </div>
+</section>
+
+<div id="footer"></div>
+<script src="/static/js/common.js"></script>
+<script>document.getElementById("limWarn").innerHTML = CADC.warnIcon;</script>
+<script src="/static/js/model.js"></script>
+</body>
+</html>

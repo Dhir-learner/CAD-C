@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nodule Analyser</title>
+<meta name="description" content="Upload a chest CT scan, select a nodule, and get an AI research estimate of how suspicious it looks.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234cc2ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%23060a12' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+  .tool { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(340px, 1fr); gap: 22px; align-items: start; }
+  @media (max-width: 1000px) { .tool { grid-template-columns: 1fr; } }
+  .left { position: relative; }
+  .drop {
+    display: block; cursor: pointer; margin: 20px; border: 1.5px dashed rgba(148, 178, 214, .3); border-radius: 16px;
+    padding: 64px 24px; text-align: center; transition: .2s;
+    background: radial-gradient(400px 200px at 50% 0%, rgba(76, 194, 255, .08), transparent);
+  }
+  .drop.over { border-color: var(--accent); background: rgba(76, 194, 255, .08); }
+  .drop h3 { margin: 16px 0 6px; font-size: 20px; }
+  .drop .ic { width: 72px; height: 72px; margin: 0 auto; border-radius: 20px; display: grid; place-items: center; background: var(--grad); color: #060a12; box-shadow: 0 10px 30px rgba(76, 194, 255, .3); }
+  .privacy { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 18px; color: var(--muted); font-size: 13px; }
+  .locked { position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; z-index: 4;
+    background: rgba(7, 11, 18, .86); border-radius: var(--radius); }
+  .locked.on { display: grid; }
+  .viewer { display: none; }
+  .viewer.on { display: block; }
+  .stagebox { position: relative; margin: 20px; border-radius: 14px; overflow: hidden; background: #000; aspect-ratio: 1; cursor: crosshair; border: 1px solid var(--border); }
+  .stagebox canvas { width: 100%; height: 100%; display: block; }
+  .hud { position: absolute; left: 12px; top: 10px; font-size: 12px; color: #cfe3f7; text-shadow: 0 1px 2px #000; pointer-events: none; font-family: var(--mono); }
+  .hud.r { left: auto; right: 12px; text-align: right; }
+  .controls { padding: 0 20px 20px; display: grid; gap: 14px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); }
+  .seg button { border: 0; background: transparent; padding: 7px 12px; font-size: 13px; color: var(--muted); }
+  .seg button.on { background: rgba(76, 194, 255, .14); color: var(--text); }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--border); background: var(--panel-2); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; }
+  .chip:hover { border-color: var(--accent); }
+  .chip b { color: var(--accent); font-weight: 600; }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .steps li { display: flex; gap: 12px; align-items: flex-start; color: var(--muted); }
+  .steps li.active { color: var(--text); }
+  .num { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; border: 1px solid var(--border); background: var(--panel-2); }
+  .active .num { background: var(--grad); color: #060a12; border: 0; }
+  .done .num { background: rgba(52, 211, 153, .15); color: var(--benign); border-color: rgba(52, 211, 153, .4); }
+  .side { display: grid; gap: 22px; }
+  .result { display: none; }
+  .result.on { display: block; animation: rise .45s ease both; }
+  .gauge-wrap { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .gauge { position: relative; width: 150px; height: 150px; flex: none; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge .val { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .gauge .val b { font-size: 30px; font-weight: 700; display: block; line-height: 1; }
+  .gauge .val span { font-size: 12px; color: var(--muted); }
+  .verdict { display: inline-flex; gap: 6px; align-items: center; padding: 5px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+  .verdict.benign { background: rgba(52, 211, 153, .12); color: var(--benign); border: 1px solid rgba(52, 211, 153, .35); }
+  .verdict.warn { background: rgba(251, 191, 36, .12); color: var(--warn); border: 1px solid rgba(251, 191, 36, .35); }
+  .verdict.malignant { background: rgba(248, 113, 113, .12); color: var(--malignant); border: 1px solid rgba(248, 113, 113, .35); }
+  .band { margin-top: 18px; }
+  .band-bar { position: relative; height: 10px; border-radius: 99px; background: linear-gradient(90deg, #34d399 0%, #34d399 30%, #fbbf24 30%, #fbbf24 70%, #f87171 70%); opacity: .85; }
+  .band-mark { position: absolute; top: -5px; width: 4px; height: 20px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 2px #070b12; transform: translateX(-2px); transition: left .9s cubic-bezier(.2, .8, .2, 1); }
+  .band-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .bars { display: grid; gap: 8px; margin-top: 18px; }
+  .bar { display: grid; grid-template-columns: 64px 1fr 48px; gap: 10px; align-items: center; font-size: 12.5px; }
+  .track { height: 8px; background: #1a2433; border-radius: 99px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 99px; width: 0; transition: width .8s cubic-bezier(.2, .8, .2, 1); }
+  .views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  .views figure { margin: 0; }
+  .views img { width: 100%; aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--border); display: block; background: #000; }
+  .views figcaption { font-size: 11.5px; color: var(--muted); text-align: center; margin-top: 5px; }
+  .history { display: grid; gap: 8px; }
+  .hist { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+  .hist:hover { border-color: var(--border-strong); }
+  .hpill { font-weight: 700; font-size: 12px; padding: 3px 9px; border-radius: 99px; }
+  .overlay { position: absolute; inset: 0; display: none; place-items: center; background: rgba(5, 9, 14, .75); z-index: 5; border-radius: var(--radius); }
+  .overlay.on { display: grid; }
+</style>
+</head>
+<body data-page="analyze">
+<div id="nav"></div>
+
+<header class="page-hero" style="padding-bottom:20px">
+  <div class="container">
+    <span class="eyebrow">Nodule analyser</span>
+    <h1 style="font-size:clamp(30px,3.6vw,44px)">Analyse a lung nodule</h1>
+    <div class="alert" style="margin-top:18px">
+      <span class="warnIcon"></span>
+      <div><b>AI research tool: not a diagnosis.</b> The result is an automated estimate of how suspicious a nodule <i>looks</i>, learned from radiologists' ratings.
+        It can be wrong, and it cannot tell whether you have cancer. <b>Please consult a doctor</b> (such as a pulmonologist or oncologist) about any scan or symptom.</div>
+    </div>
+  </div>
+</header>
+
+<main class="container tool">
+  <section class="card left">
+    <div class="card-head">
+      <h2 id="leftTitle">CT scan</h2>
+      <div style="display:none;gap:10px;align-items:center;flex-wrap:wrap" id="viewerTools">
+        <div class="seg" id="windowSeg"><button data-w="lung" class="on">Lung</button><button data-w="soft">Soft tissue</button></div>
+        <button class="btn sm" id="newScan">New scan</button>
+      </div>
+    </div>
+
+    <div id="uploader">
+      <label class="drop" id="drop">
+        <div class="ic">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <h3>Drop a chest CT scan here</h3>
+        <p class="muted small" style="margin:0">A <b>.zip</b> of one DICOM series, or select all the <b>.dcm</b> files of one scan.</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:20px">
+          <span class="btn primary">Choose files</span>
+          <button type="button" class="btn" id="demoBtn">Try a sample scan</button>
+        </div>
+        <input type="file" id="fileInput" multiple accept=".zip,.dcm,application/dicom,application/zip" hidden>
+        <div class="privacy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          Processed on this computer only. Your scan is not uploaded to the internet.
+        </div>
+      </label>
+    </div>
+
+    <div class="viewer" id="viewer">
+      <div class="stagebox" id="stagebox">
+        <canvas id="canvas" width="512" height="512" aria-label="CT slice: click on a nodule to select it"></canvas>
+        <div class="hud" id="hudL"></div>
+        <div class="hud r" id="hudR"></div>
+      </div>
+      <div class="controls">
+        <div>
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <span class="small muted">Slice <span class="mono" id="sliceLabel">–</span></span>
+            <span class="small muted">Scroll, drag the slider, or use ↑ ↓</span>
+          </div>
+          <input type="range" id="slider" min="0" max="0" value="0" aria-label="Slice">
+        </div>
+        <div id="knownWrap" style="display:none">
+          <div class="small muted" style="margin-bottom:8px">Nodules marked by LIDC radiologists: click to analyse</div>
+          <div class="chips" id="known"></div>
+        </div>
+      </div>
+    </div>
+    <div class="locked" id="locked">
+      <div>
+        <p style="margin:0 0 14px" class="text-2">Please read and accept the AI disclaimer to use the analyser.</p>
+        <button class="btn primary" data-consent>Read the disclaimer</button>
+      </div>
+    </div>
+    <div class="overlay" id="loading"><div style="text-align:center"><div class="spinner"></div><div id="loadingText">Loading scan…</div></div></div>
+  </section>
+
+  <div class="side">
+    <section class="card">
+      <div class="card-head"><h2>How to use it</h2></div>
+      <div class="card-body">
+        <ol class="steps" id="steps">
+          <li class="active"><span class="num">1</span><div><b>Upload a CT scan</b><div class="small">A chest CT as DICOM files, or try the sample.</div></div></li>
+          <li><span class="num">2</span><div><b>Click on the nodule</b><div class="small">Scroll to the slice where the nodule looks largest and click its centre.</div></div></li>
+          <li><span class="num">3</span><div><b>Analyse</b><div class="small">Five 3D neural networks study a 48 mm cube around your point.</div></div></li>
+        </ol>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">
+          <button class="btn primary" id="analyzeBtn" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            Analyse nodule</button>
+          <span class="small muted mono" id="pointLabel"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card result" id="result">
+      <div class="card-head"><h2>AI estimate</h2><span class="tiny muted mono" id="resultAt"></span></div>
+      <div class="card-body">
+        <div class="gauge-wrap">
+          <div class="gauge">
+            <svg width="150" height="150" viewBox="0 0 150 150" aria-hidden="true">
+              <circle cx="75" cy="75" r="62" fill="none" stroke="#1a2433" stroke-width="12"/>
+              <circle id="arc" cx="75" cy="75" r="62" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round"
+                      stroke-dasharray="389.56" stroke-dashoffset="389.56" style="transition: stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1), stroke .3s"/>
+            </svg>
+            <div class="val"><div><b id="probText">–</b><span>malignancy<br>likelihood</span></div></div>
+          </div>
+          <div style="flex:1;min-width:180px">
+            <span class="verdict" id="verdict">–</span>
+            <div class="small text-2" id="verdictText"></div>
+          </div>
+        </div>
+        <div class="band">
+          <div class="band-bar"><div class="band-mark" id="bandMark" style="left:0"></div></div>
+          <div class="band-labels"><span>Low</span><span>Intermediate</span><span>High</span></div>
+        </div>
+        <div class="bars" id="bars"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;gap:10px;flex-wrap:wrap">
+          <span class="small muted">What the models saw</span>
+          <div class="seg" id="viewSeg"><button data-v="views" class="on">CT</button><button data-v="heatmaps">AI attention</button></div>
+        </div>
+        <div class="views">
+          <figure><img id="vAxial" alt="Axial view of the analysed region"><figcaption>Axial</figcaption></figure>
+          <figure><img id="vCoronal" alt="Coronal view of the analysed region"><figcaption>Coronal</figcaption></figure>
+          <figure><img id="vSagittal" alt="Sagittal view of the analysed region"><figcaption>Sagittal</figcaption></figure>
+        </div>
+        <p class="tiny muted" id="heatNote" style="display:none;margin:8px 0 0">Orange shows the regions that pushed the models towards "malignant" (Grad-CAM). It shows where they looked, not proof of disease.</p>
+        <div class="alert info" style="margin-top:16px">
+          <span class="warnIcon"></span>
+          <div><b>What to do next:</b> whatever this estimate says, please discuss your scan with a doctor. They will compare it with earlier scans,
+            your history and other tests. Many suspicious-looking nodules turn out to be harmless, and a low score does not rule out cancer.</div>
+        </div>
+        <div class="alert" id="trainNote" style="display:none;margin-top:12px">
+          <span class="warnIcon"></span><div>This scan is part of the LIDC-IDRI dataset the models were trained on, so this score is optimistic.</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn sm" id="reportBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print / save report</button>
+          <a class="btn sm" href="/learn#doctor">When to see a doctor</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="histCard" style="display:none">
+      <div class="card-head"><h2>Analysed in this scan</h2></div>
+      <div class="card-body"><div class="history" id="history"></div></div>
+    </section>
+  </div>
+</main>
+
+<div id="footer"></div>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/analyze.js"></script>
+</body>
+</html>

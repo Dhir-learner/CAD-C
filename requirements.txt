@@ -1,0 +1,10 @@
+# torch is preinstalled on Colab; install it separately on a local machine.
+numpy
+scipy
+pandas
+scikit-learn
+requests
+pylidc
+pydicom<3
+# pylidc imports pkg_resources, which setuptools 81 removed.
+setuptools<81

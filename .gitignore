@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# Data and training outputs live on Google Drive, never in git.
+data/
+runs/
+*.npz
+*.pt

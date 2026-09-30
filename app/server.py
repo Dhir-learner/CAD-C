@@ -32,6 +32,8 @@ from pydantic import BaseModel
 from sklearn.metrics import roc_curve
 
 from cadc.data import NoduleDataset
+from cadc.detect import detect as detect_nodules_in
+from cadc.detect import load_detector
 from cadc.predict import load_models, score
 from cadc.preprocess import download_series, extract_patch
 
@@ -47,7 +49,9 @@ HEAT_RGB = np.array([255, 138, 61], dtype=np.float32)  # heatmap overlay colour 
 
 app = FastAPI(title="CADC nodule analysis")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
-state = {"models": [], "device": None, "lidc": {}, "run": None}
+state = {"models": [], "device": None, "lidc": {}, "runs": [], "metrics_run": None, "detector": None, "bundle": None, "model_names": []}
+RUN_NAMES = {"baseline": "3D ResNet", "multiview": "2.5D multi-view", "ensemble": "Ensemble"}
+detector_lock = threading.Lock()
 scans = OrderedDict()
 scans_lock = threading.Lock()
 
@@ -201,11 +205,12 @@ for _name in PAGES:
 
 @app.get("/api/metrics")
 def metrics():
-    """Everything the Model page charts: headline metrics, ROC curves, learning curves."""
-    run = Path(state["run"])
+    """Everything the Model page shows: headline metrics, ROC, learning curves, model comparison."""
+    run = Path(state["metrics_run"])
     if not (run / "metrics.json").exists():
         raise HTTPException(404, "No evaluation results yet: run cadc.evaluate on the training run.")
     out = json.loads((run / "metrics.json").read_text())
+    out["name"] = RUN_NAMES.get(run.name, run.name)
 
     oof = pd.read_csv(run / "oof_predictions.csv")
     patients = oof.groupby("patient_id").agg(label=("label", "max"), prob=("prob", "max"))
@@ -223,15 +228,22 @@ def metrics():
                                       accuracy=float((pred == y).mean()), sensitivity=float(pred[y].mean()),
                                       specificity=float((~pred[~y]).mean())))
 
-    hist = [pd.read_csv(f) for f in sorted(run.glob("fold*/history.csv"))]
-    n = min(len(h) for h in hist)
-    out["history"] = {
-        "epochs": list(range(1, n + 1)),
-        "auc_folds": [h.auc[:n].round(4).tolist() for h in hist],
-        "loss_folds": [h.train_loss[:n].round(4).tolist() for h in hist],
-    }
-    out["history"]["auc_mean"] = np.mean(out["history"]["auc_folds"], axis=0).round(4).tolist()
-    out["history"]["loss_mean"] = np.mean(out["history"]["loss_folds"], axis=0).round(4).tolist()
+    # Learning curves of each trained model (an ensemble has none of its own).
+    out["history"] = []
+    for r in state["runs"]:
+        hist = [pd.read_csv(f) for f in sorted(Path(r).glob("fold*/history.csv"))]
+        if not hist:
+            continue
+        n = min(len(h) for h in hist)
+        out["history"].append(dict(
+            name=RUN_NAMES.get(Path(r).name, Path(r).name), epochs=list(range(1, n + 1)),
+            auc_mean=np.mean([h.auc[:n] for h in hist], axis=0).round(4).tolist(),
+            loss_mean=np.mean([h.train_loss[:n] for h in hist], axis=0).round(4).tolist(),
+        ))
+    for extra in ("comparison", "diagnosis_metrics"):
+        f = run / f"{extra}.json"
+        if f.exists():
+            out[extra] = json.loads(f.read_text())
     out["dataset"] = dict(nodules=int(len(oof)), malignant=int(oof.label.sum()),
                           patients=int(oof.patient_id.nunique()), scans=len(state["lidc"]) or 1018)
     return out
@@ -239,8 +251,9 @@ def metrics():
 
 @app.get("/api/status")
 def status():
-    return dict(models=len(state["models"]), device=str(state["device"]), run=state["run"],
-                lidc_scans_indexed=len(state["lidc"]))
+    return dict(models=len(state["models"]), device=str(state["device"]),
+                runs=[RUN_NAMES.get(Path(r).name, Path(r).name) for r in state["runs"]],
+                detector=state["bundle"] is not None, lidc_scans_indexed=len(state["lidc"]))
 
 
 @app.post("/api/upload")
@@ -300,7 +313,8 @@ def predict(scan_id: str, p: Point):
         raise HTTPException(400, "Point is outside the scan.")
     patch = extract_patch(vol, scan["spacing"], np.array([p.y, p.x, p.slice]))
     mean, per_model = score(state["models"], patch[None], state["device"])
-    heat = gradcam(state["models"], patch, state["device"])
+    cam_models = [m for m in state["models"] if hasattr(m, "layers")]  # Grad-CAM needs the 3D ResNets
+    heat = gradcam(cam_models, patch, state["device"]) if cam_models else np.zeros(patch.shape, np.float32)
     views, heats = patch_views(patch), patch_views(heat)
     prob = float(mean[0])
     b64 = lambda data: base64.b64encode(data).decode()
@@ -308,10 +322,35 @@ def predict(scan_id: str, p: Point):
         probability=prob,
         verdict="Likely malignant" if prob >= 0.5 else "Likely benign",
         per_model=[float(v) for v in per_model[0]],
+        model_names=state["model_names"],
+        has_heatmap=bool(cam_models),
         views={k: b64(to_png(v, -1350, 150)) for k, v in views.items()},
         heatmaps={k: b64(overlay_png(views[k], heats[k])) for k in views},
         in_training_data=scan["uid"] in state["lidc"],
     )
+
+
+@app.post("/api/scan/{scan_id}/detect")
+def detect_nodules(scan_id: str, min_score: float = 0.3, limit: int = 15):
+    """Search the whole scan for nodule candidates, then classify each one with the ensemble."""
+    if state["bundle"] is None:
+        raise HTTPException(503, "The nodule detector is not installed. See the README section on automatic nodule detection.")
+    scan = get_scan(scan_id)
+    if "candidates" not in scan:
+        with detector_lock:
+            if state["detector"] is None:
+                state["detector"] = load_detector(state["bundle"], state["device"])
+            found = detect_nodules_in(state["detector"], scan["vol"], scan["spacing"], state["device"], min_score)[:limit]
+        if found and state["models"]:
+            patches = np.stack([extract_patch(scan["vol"], scan["spacing"], np.array([c["y"], c["x"], c["slice"]]))
+                                for c in found])
+            probs = score(state["models"], patches, state["device"])[0]
+            for c, pr in zip(found, probs):
+                c["malignancy"] = float(pr)
+        for c in found:
+            c["slice"] = int(round(np.clip(c["slice"], 0, scan["vol"].shape[2] - 1)))
+        scan["candidates"] = found
+    return dict(candidates=scan["candidates"], in_training_data=scan["uid"] in state["lidc"])
 
 
 def open_when_ready(host, port, url, timeout=60):
@@ -328,7 +367,12 @@ def open_when_ready(host, port, url, timeout=60):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--run", type=Path, default=ROOT / "runs" / "baseline", help="training run with fold*/ checkpoints")
+    parser.add_argument("--run", type=Path, nargs="+", help="training run(s) with fold*/ checkpoints; all their models "
+                        "are averaged (default: runs/baseline and runs/multiview, whichever exist)")
+    parser.add_argument("--metrics", type=Path, help="run whose results the Model page shows (default: runs/ensemble if "
+                        "it exists, else the first run)")
+    parser.add_argument("--bundle", type=Path, default=ROOT / "data" / "bundles" / "lung_nodule_ct_detection",
+                        help="MONAI lung nodule detection bundle (optional)")
     parser.add_argument("--which", choices=["final", "best"], default="final")
     parser.add_argument("--patches", type=Path, default=ROOT / "data" / "patches",
                         help="preprocessed shards, used to show LIDC radiologist annotations")
@@ -338,13 +382,27 @@ def main():
     args = parser.parse_args()
 
     state["device"] = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    state["run"] = str(args.run)
-    try:
-        state["models"] = load_models(args.run, args.which, state["device"])
-    except SystemExit as e:
-        print(f"WARNING: {e}. The app will open, but cannot analyse nodules until models exist.")
+    runs = args.run or [r for r in (ROOT / "runs" / "baseline", ROOT / "runs" / "multiview") if r.exists()]
+    for r in runs:
+        try:
+            loaded = load_models(r, args.which, state["device"])
+            state["models"] += loaded
+            state["model_names"] += [f"{RUN_NAMES.get(r.name, r.name)} {i + 1}" for i in range(len(loaded))]
+            state["runs"].append(str(r))
+        except SystemExit as e:
+            print(f"WARNING: {e}")
+    if not state["models"]:
+        print("WARNING: no trained models found. The app will open, but cannot analyse nodules.")
+    ensemble = ROOT / "runs" / "ensemble"
+    default_metrics = ensemble if (ensemble / "metrics.json").exists() else Path(state["runs"][0] if state["runs"] else ROOT / "runs" / "baseline")
+    state["metrics_run"] = str(args.metrics or default_metrics)
+    if (args.bundle / "models" / "model.pt").exists():
+        state["bundle"] = str(args.bundle)
+    else:
+        print("Nodule detector not installed; automatic detection is disabled (see README).")
     state["lidc"] = index_lidc_annotations(args.patches)
-    print(f"{len(state['models'])} models on {state['device']}, {len(state['lidc'])} LIDC scans indexed")
+    print(f"{len(state['models'])} models from {len(state['runs'])} run(s) on {state['device']}, "
+          f"{len(state['lidc'])} LIDC scans indexed, detector {'on' if state['bundle'] else 'off'}")
     url = f"http://{args.host}:{args.port}"
     print(f"Open {url} in your browser (keep this window open while using the app)")
     if not args.no_browser:

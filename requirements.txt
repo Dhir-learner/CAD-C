@@ -1,4 +1,5 @@
-# torch is preinstalled on Colab; install it separately on a local machine.
+# torch and torchvision are preinstalled on Colab; install them separately on a local machine
+# (see README: uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126).
 numpy
 scipy
 pandas
@@ -7,5 +8,7 @@ requests
 matplotlib
 pylidc
 pydicom<3
+# reads the LIDC diagnosis spreadsheet (cadc.diagnosis_eval)
+xlrd
 # pylidc imports pkg_resources, which setuptools 81 removed.
 setuptools<81

@@ -40,6 +40,8 @@
   .chip { border: 1px solid var(--border); background: var(--panel-2); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; }
   .chip:hover { border-color: var(--accent); }
   .chip b { color: var(--accent); font-weight: 600; }
+  .chip .sc { font-weight: 700; }
+  .detect { padding: 14px; border-radius: 14px; border: 1px solid rgba(76, 194, 255, .25); background: linear-gradient(180deg, rgba(76, 194, 255, .06), transparent); }
   .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
   .steps li { display: flex; gap: 12px; align-items: flex-start; color: var(--muted); }
   .steps li.active { color: var(--text); }
@@ -64,7 +66,7 @@
   .band-mark { position: absolute; top: -5px; width: 4px; height: 20px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 2px #070b12; transform: translateX(-2px); transition: left .9s cubic-bezier(.2, .8, .2, 1); }
   .band-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
   .bars { display: grid; gap: 8px; margin-top: 18px; }
-  .bar { display: grid; grid-template-columns: 64px 1fr 48px; gap: 10px; align-items: center; font-size: 12.5px; }
+  .bar { display: grid; grid-template-columns: 110px 1fr 48px; gap: 10px; align-items: center; font-size: 12.5px; }
   .track { height: 8px; background: #1a2433; border-radius: 99px; overflow: hidden; }
   .fill { height: 100%; border-radius: 99px; width: 0; transition: width .8s cubic-bezier(.2, .8, .2, 1); }
   .views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
@@ -137,6 +139,15 @@
           </div>
           <input type="range" id="slider" min="0" max="0" value="0" aria-label="Slice">
         </div>
+        <div id="detectWrap" class="detect" style="display:none">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn primary sm" id="detectBtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>
+              Find nodules automatically</button>
+            <span class="tiny muted" id="detectHint">The AI searches the whole scan (about 30 seconds)</span>
+          </div>
+          <div class="chips" id="cands" style="margin-top:10px"></div>
+        </div>
         <div id="knownWrap" style="display:none">
           <div class="small muted" style="margin-bottom:8px">Nodules marked by LIDC radiologists: click to analyse</div>
           <div class="chips" id="known"></div>
@@ -158,8 +169,8 @@
       <div class="card-body">
         <ol class="steps" id="steps">
           <li class="active"><span class="num">1</span><div><b>Upload a CT scan</b><div class="small">A chest CT as DICOM files, or try the sample.</div></div></li>
-          <li><span class="num">2</span><div><b>Click on the nodule</b><div class="small">Scroll to the slice where the nodule looks largest and click its centre.</div></div></li>
-          <li><span class="num">3</span><div><b>Analyse</b><div class="small">Five 3D neural networks study a 48 mm cube around your point.</div></div></li>
+          <li><span class="num">2</span><div><b>Find the nodule</b><div class="small">Click <i>Find nodules automatically</i>, or scroll to where a nodule looks largest and click its centre.</div></div></li>
+          <li><span class="num">3</span><div><b>Analyse</b><div class="small" id="stepAnalyse">An ensemble of neural networks studies a 48 mm cube around the point.</div></div></li>
         </ol>
         <div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">
           <button class="btn primary" id="analyzeBtn" disabled>
@@ -201,7 +212,7 @@
           <figure><img id="vCoronal" alt="Coronal view of the analysed region"><figcaption>Coronal</figcaption></figure>
           <figure><img id="vSagittal" alt="Sagittal view of the analysed region"><figcaption>Sagittal</figcaption></figure>
         </div>
-        <p class="tiny muted" id="heatNote" style="display:none;margin:8px 0 0">Orange shows the regions that pushed the models towards "malignant" (Grad-CAM). It shows where they looked, not proof of disease.</p>
+        <p class="tiny muted" id="heatNote" style="display:none;margin:8px 0 0">Orange shows the regions that pushed the 3D models towards "malignant" (Grad-CAM). It shows where they looked, not proof of disease.</p>
         <div class="alert info" style="margin-top:16px">
           <span class="warnIcon"></span>
           <div><b>What to do next:</b> whatever this estimate says, please discuss your scan with a doctor. They will compare it with earlier scans,

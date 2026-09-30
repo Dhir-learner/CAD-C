@@ -1,13 +1,18 @@
 // Nodule analyser page: upload a scan, browse slices, pick a point, show the ensemble's estimate.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const S = { scan: null, k: 0, win: "lung", point: null, cache: new Map(), history: [], view: "views", last: null };
+  const S = { scan: null, k: 0, win: "lung", point: null, cache: new Map(), history: [], view: "views", last: null, cands: [], detector: false };
   const canvas = $("canvas"), ctx = canvas.getContext("2d");
   document.querySelectorAll(".warnIcon").forEach((el) => (el.innerHTML = CADC.warnIcon));
 
   // The tool stays locked until the visitor accepts the AI disclaimer.
   $("locked").classList.toggle("on", !CADC.consented);
   CADC.whenConsented(() => $("locked").classList.remove("on"));
+
+  fetch("/api/status").then((r) => r.json()).then((st) => {
+    S.detector = st.detector;
+    if (st.models) $("stepAnalyse").textContent = `An ensemble of ${st.models} neural networks (${st.runs.join(" + ")}) studies a 48 mm cube around the point.`;
+  }).catch(() => {});
 
   function loading(on, text) { $("loading").classList.toggle("on", on); if (text) $("loadingText").textContent = text; }
   async function api(url, opts) {
@@ -41,7 +46,10 @@
   }
 
   function openScan(info) {
-    S.scan = info; S.cache.clear(); S.point = null; S.history = [];
+    S.scan = info; S.cache.clear(); S.point = null; S.history = []; S.cands = [];
+    $("detectWrap").style.display = S.detector ? "block" : "none";
+    $("cands").innerHTML = ""; $("detectBtn").disabled = false;
+    $("detectHint").textContent = "The AI searches the whole scan (about 30 seconds)";
     const [rows, cols, n] = info.shape;
     canvas.width = cols; canvas.height = rows;
     $("slider").max = n - 1;
@@ -93,6 +101,17 @@
   }
   function draw(img) {
     ctx.drawImage(img, 0, 0);
+    // detected candidates near this slice: dashed rings coloured by suspicion, numbered
+    S.cands.forEach((c, i) => {
+      const dz = Math.abs(c.slice - S.k) * S.scan.spacing_mm[2];
+      if (dz > Math.max(4, c.diameter_mm / 2)) return;
+      const r = Math.max(8, (c.diameter_mm / 2 + 4) / S.scan.spacing_mm[0]);
+      const col = c.malignancy === undefined ? "#4cc2ff" : c.malignancy >= 0.7 ? "#f87171" : c.malignancy >= 0.3 ? "#fbbf24" : "#34d399";
+      ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5, canvas.width / 340); ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = col; ctx.font = `bold ${Math.round(canvas.width / 38)}px Inter, sans-serif`;
+      ctx.fillText(String(i + 1), c.x + r * 0.75, c.y - r * 0.75); ctx.restore();
+    });
     const p = S.point;
     if (!p) return;
     const r = 22 / S.scan.spacing_mm[0];
@@ -131,6 +150,31 @@
   $("windowSeg").addEventListener("click", (e) => {
     const w = e.target.dataset.w; if (!w) return;
     S.win = w; [...$("windowSeg").children].forEach((b) => b.classList.toggle("on", b.dataset.w === w)); showSlice(S.k);
+  });
+
+  // ---------- automatic detection ----------
+  $("detectBtn").addEventListener("click", async () => {
+    if (!S.scan || !CADC.consented) return;
+    $("detectBtn").disabled = true;
+    loading(true, "Searching the whole scan for nodules… about 30 seconds");
+    try {
+      const r = await api(`/api/scan/${S.scan.scan_id}/detect`, { method: "POST" });
+      S.cands = r.candidates;
+      $("detectHint").textContent = S.cands.length
+        ? `${S.cands.length} candidate${S.cands.length > 1 ? "s" : ""} found. Click one to analyse it in detail. Rings on the slices show where they are.`
+        : "No nodules found above the detector's threshold. You can still click on a spot to analyse it.";
+      $("cands").innerHTML = "";
+      S.cands.forEach((c, i) => {
+        const b = document.createElement("button"); b.className = "chip";
+        const m = c.malignancy;
+        const sc = m === undefined ? "" : ` · <span class="sc" style="color:${colorFor(m)}">${fmtPct(m)}</span> suspicion`;
+        b.innerHTML = `#${i + 1} · <b>${c.diameter_mm.toFixed(0)} mm</b> · slice ${c.slice + 1}${sc}`;
+        b.title = `Detector confidence ${(c.score * 100).toFixed(0)}%`;
+        b.onclick = () => { setPoint(c.x, c.y, c.slice); analyze(); };
+        $("cands").appendChild(b);
+      });
+      if (S.cands.length) showSlice(S.cands[0].slice); else redraw();
+    } catch (e) { CADC.toast(e.message); $("detectBtn").disabled = false; } finally { loading(false); }
   });
 
   // ---------- analyse ----------
@@ -175,10 +219,12 @@
     requestAnimationFrame(() => requestAnimationFrame(() => { $("bandMark").style.left = (r.probability * 100).toFixed(1) + "%"; }));
     $("resultAt").textContent = `x ${Math.round(r.point.x)} · y ${Math.round(r.point.y)} · slice ${r.point.slice + 1}`;
     $("bars").innerHTML = r.per_model.map((v, i) => `
-      <div class="bar"><span class="muted">Model ${i + 1}</span>
+      <div class="bar"><span class="muted">${(r.model_names && r.model_names[i]) || "Model " + (i + 1)}</span>
         <div class="track"><div class="fill" style="background:${colorFor(v)}" data-w="${(v * 100).toFixed(1)}"></div></div>
         <span class="mono" style="text-align:right">${fmtPct(v)}</span></div>`).join("");
     requestAnimationFrame(() => requestAnimationFrame(() => document.querySelectorAll("#bars .fill").forEach((f) => (f.style.width = f.dataset.w + "%"))));
+    $("viewSeg").style.display = r.has_heatmap === false ? "none" : "";
+    if (r.has_heatmap === false) S.view = "views";
     renderViews();
     $("trainNote").style.display = r.in_training_data ? "flex" : "none";
   }
@@ -241,7 +287,7 @@
       <div class="imgs">${img(r.views.axial, "Axial")}${img(r.views.coronal, "Coronal")}${img(r.views.sagittal, "Sagittal")}</div>
       <h3>AI attention (Grad-CAM)</h3>
       <div class="imgs">${img(r.heatmaps.axial, "Axial")}${img(r.heatmaps.coronal, "Coronal")}${img(r.heatmaps.sagittal, "Sagittal")}</div>
-      <footer>Model: ensemble of five 3D ResNets trained on LIDC-IDRI (1,627 nodules; cross-validated AUC about 0.92 against radiologist ratings).
+      <footer>Model: ensemble of ${r.per_model.length} neural networks trained on LIDC-IDRI (1,627 nodules), cross-validated against radiologist ratings.
         Labels are radiologists' opinions, not biopsy results.</footer>
       <p><button onclick="print()">Print / save as PDF</button></p>
       <script>setTimeout(()=>print(),400)<\/script>

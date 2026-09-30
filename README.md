@@ -1,8 +1,11 @@
 # CADC: lung nodule malignancy prediction on LIDC-IDRI
 
-A 3D convolutional neural network that looks at a lung nodule in a CT scan and
-estimates how likely it is to be malignant. It is trained on the public
-LIDC-IDRI dataset (1,010 patients, 1,018 CT scans) on Google Colab.
+An ensemble of two deep-learning models (a 3D CNN and a 2.5D multi-view CNN) that looks at a
+lung nodule in a CT scan and estimates how likely it is to be malignant. A pretrained detector
+can also find nodules automatically. It is trained on the public LIDC-IDRI dataset (1,010 patients,
+1,018 CT scans), with a local web app for exploring it.
+
+![Tour of the web app](docs/demo.gif)
 
 **What the labels are.** In LIDC-IDRI, up to 4 radiologists rated each nodule's
 likelihood of malignancy from 1 (highly unlikely) to 5 (highly suspicious).
@@ -11,6 +14,31 @@ at least 3.5 counts as malignant, and nodules in between are left out as
 ambiguous. These are expert opinions, not biopsy results, so the model learns
 to predict what radiologists would think. It is a research project, not a
 clinical tool.
+
+## Results
+
+All numbers come from 5-fold cross-validation split by patient: each nodule is scored only by
+models that never saw that patient. 1,627 nodules from 724 patients (504 malignant).
+
+| Model | AUC vs radiologist ratings (95% CI) | Accuracy | Sensitivity | Specificity | Patient-level AUC | AUC vs confirmed diagnosis |
+|---|---|---|---|---|---|---|
+| 3D ResNet (8.3 M params, from scratch) | 0.924 (0.907–0.939) | 86.7% | 83.9% | 87.9% | 0.933 | 0.662 |
+| 2.5D multi-view (ResNet18, ImageNet-pretrained) | 0.931 (0.916–0.944) | 86.4% | 83.3% | 87.8% | 0.929 | 0.713 |
+| **Ensemble (10 networks)** | **0.936 (0.921–0.949)** | **88.3%** | **84.9%** | **89.8%** | **0.941** | 0.680 |
+| *Radiologists' own ratings* | – | – | – | – | – | *0.765* |
+
+- **Against radiologists' ratings** the ensemble beats either model alone, within the 0.85–0.95 range
+  usually reported for LIDC-IDRI.
+- **Against confirmed diagnoses** (118 LIDC patients with a diagnosis confirmed by biopsy, surgery,
+  2-year stability or progression), every model scores much lower (AUC about 0.66–0.71), below the
+  radiologists' own ratings (0.77). The models learned to imitate radiologists' opinions, and predicting
+  actual cancer is harder; many of these patients also had metastases from other cancers. With 118 patients
+  the confidence intervals are wide (about ±0.12), so the differences between the three models on this test
+  are not meaningful. This is the most honest limitation of the project.
+- **No overfitting**: training vs unseen-patient AUC differ by about 0.02, and validation AUC does not fall
+  late in training (see the Model page of the web app).
+- **Detection**: MONAI's pretrained LUNA16 RetinaNet found 14 of 17 radiologist-marked nodules on a
+  spot check of 3 scans (it was trained on LUNA16, which comes from LIDC-IDRI, so this is not an independent test).
 
 ---
 
@@ -116,6 +144,40 @@ lowest slice (feet end), all starting at 0. Upload the folder to Colab or Drive 
 
 ---
 
+## Second model, ensemble and diagnosis check
+
+Besides the 3D ResNet (`--arch resnet3d`, the default), `cadc.train` can train a **2.5D multi-view
+CNN** (`--arch multiview2d`): it slices 9 planes through the nodule (3 orthogonal, 6 diagonal), runs each
+through one shared ImageNet-pretrained ResNet18, and pools the features. Both use the same patient folds,
+so their out-of-fold predictions can be averaged honestly.
+
+```
+rem everything in one go (both models, evaluation, ensemble, diagnosis check):
+train_local.bat
+
+rem or step by step:
+.venv\Scripts\python -m cadc.train --arch multiview2d --data data\patches --out runs\multiview --fold 0
+.venv\Scripts\python -m cadc.evaluate --run runs\multiview
+.venv\Scripts\python -m cadc.ensemble --runs runs\baseline runs\multiview --names "3D ResNet" "2.5D multi-view" --out runs\ensemble
+.venv\Scripts\python -m cadc.diagnosis_eval --runs runs\baseline runs\multiview --out runs\ensemble --data data\patches --diagnosis data\meta\diagnosis.xls
+```
+
+The diagnosis spreadsheet comes from The Cancer Imaging Archive:
+`curl -L -o data\meta\diagnosis.xls https://www.cancerimagingarchive.net/wp-content/uploads/tcia-diagnosis-data-2012-04-20.xls`
+
+## Automatic nodule detection
+
+The web app can search a whole scan for nodules with MONAI's pretrained
+[lung_nodule_ct_detection](https://github.com/Project-MONAI/model-zoo) bundle (RetinaNet trained on LUNA16,
+Apache-2.0), then score every candidate with the ensemble. One-time setup (about 160 MB):
+
+```
+uv pip install -r requirements-app.txt
+.venv\Scripts\python -c "from monai.bundle import download; download(name='lung_nodule_ct_detection', bundle_dir='data/bundles')"
+```
+
+It takes about 30 seconds per scan on the laptop GPU. Without the bundle the app still works; the button is hidden.
+
 ## Web app
 
 A local website with five pages. It runs on your PC with the trained models in `runsaseline`.
@@ -124,8 +186,8 @@ A local website with five pages. It runs on your PC with the trained models in `
 |---|---|
 | **Home** | Overview, live headline results, an interactive 3D model of the lungs |
 | **Learn** | What lung cancer is, types, risk factors, symptoms, lung nodules, staging, diagnosis, treatment, prevention, and *when to see a doctor*. Includes a 3D explorer: click labelled parts of the lungs, and switch between healthy and stages I–IV to watch a tumour grow, reach the lymph nodes and spread |
-| **Analyse a scan** | Upload a chest CT, click a nodule, get the 5-model estimate with a low / intermediate / high band, each model's vote, CT views and an **AI attention heatmap** (Grad-CAM), plus a printable report |
-| **The model** | Accuracy, sensitivity, specificity, interactive ROC and learning curves, per-fold results, architecture and limitations |
+| **Analyse a scan** | Upload a chest CT, let the AI **find nodules automatically** or click one, get the 10-network ensemble estimate with a low / intermediate / high band, each model's vote, CT views and an **AI attention heatmap** (Grad-CAM), plus a printable report |
+| **The model** | Accuracy, sensitivity, specificity, interactive ROC and learning curves, model comparison, the real-diagnosis test, per-fold results, architecture and limitations |
 | **About & FAQ** | Medical disclaimer, privacy, FAQ, credits |
 
 **AI warnings.** On first visit every page shows a disclaimer that must be accepted (it's an AI research tool, not a diagnosis; consult a doctor).
@@ -146,7 +208,7 @@ The app does **not** find nodules by itself: you point to them.
 First-time setup on a new PC (already done on this one):
 ```
 uv pip install -r requirements.txt -r requirements-app.txt
-uv pip install torch --index-url https://download.pytorch.org/whl/cu126
+uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 ```
 Options: `run_app.bat --run runs\other_run --port 8080`.
 
@@ -167,7 +229,11 @@ Options: `run_app.bat --run runs\other_run --port 8080`.
 |---|---|
 | `cadc/preprocess.py` | Downloads each scan from TCIA; pylidc groups the radiologists' annotations into nodules; saves a 64³ patch (1 mm voxels, clipped to −1000…400 HU) per nodule with its ratings, one `.npz` file per scan. Resumable. |
 | `cadc/data.py` | Loads the patches, applies the label rule, makes patient-grouped folds, and augments training data (random 48³ crops, flips, rotations). |
-| `cadc/model.py` | A small 3D ResNet (about 8 million parameters) that outputs one malignancy score. |
+| `cadc/model.py` | The 3D ResNet (8.3 M parameters) and the 2.5D multi-view CNN (ImageNet-pretrained ResNet18, 11.2 M). |
+| `cadc/ensemble.py` | Averages several runs' out-of-fold predictions and compares them with the ensemble. |
+| `cadc/diagnosis_eval.py` | Tests models against the 157 LIDC patients with confirmed diagnoses, next to the radiologists' ratings. |
+| `cadc/detect.py` | Finds nodule candidates in a whole scan with MONAI's pretrained LUNA16 detector. |
+| `docs/make_demo_gif.py` | Records `docs/demo.gif` from the running web app. |
 | `cadc/train.py` | Trains one fold with mixed precision, class-balanced loss and a cosine learning-rate schedule. Saves `last.pt` every epoch (for resuming), `best.pt` and `final.pt`, `history.csv` and validation predictions. |
 | `cadc/evaluate.py` | Pools the 5 folds' predictions and reports AUC with a 95% confidence interval, accuracy, sensitivity, specificity, nodule and patient level, plus a ROC curve. |
 | `cadc/predict.py` | Averages the 5 models' scores on nodules from a shard or a new DICOM scan. |
@@ -209,7 +275,7 @@ Your laptop's RTX 4050 (6 GB) can also train this model.
 ```
 uv venv --python 3.11 .venv
 uv pip install -r requirements.txt
-uv pip install torch --index-url https://download.pytorch.org/whl/cu126
+uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 .venv\Scripts\python -m cadc.train --data data\patches --out runs\local --fold 0 --batch-size 16
 ```
 

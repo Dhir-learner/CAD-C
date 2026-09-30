@@ -42,12 +42,12 @@
 <section class="block" style="padding-top:20px">
   <div class="container">
     <div class="grid c3 needs-metrics">
-      <div class="card stat reveal"><div class="v grad-text" id="mAuc">–</div><div class="l">Nodule-level AUC · <span id="mAucCi"></span></div></div>
+      <div class="card stat reveal"><div class="v grad-text" id="mAuc">–</div><div class="l"><span id="mName"></span> nodule-level AUC · <span id="mAucCi"></span></div></div>
       <div class="card stat reveal"><div class="v" id="mAcc">–</div><div class="l">Accuracy at a 50% threshold</div></div>
       <div class="card stat reveal"><div class="v" id="mPAuc">–</div><div class="l">Patient-level AUC (most suspicious nodule)</div></div>
       <div class="card stat reveal"><div class="v" id="mSens">–</div><div class="l">Sensitivity: malignant nodules caught</div></div>
       <div class="card stat reveal"><div class="v" id="mSpec">–</div><div class="l">Specificity: benign nodules correctly cleared</div></div>
-      <div class="card stat reveal"><div class="v">5</div><div class="l">Models in the ensemble (one per fold)</div></div>
+      <div class="card stat reveal"><div class="v" id="mModels">–</div><div class="l">Neural networks in the ensemble</div></div>
     </div>
   </div>
 </section>
@@ -64,8 +64,9 @@
     <div class="card chart-card reveal">
       <h3>Is it overfitting?</h3>
       <p class="sub" id="fitText">Loading…</p>
+      <div class="legend" id="curveLegend"></div>
       <div id="aucChart" class="needs-metrics"></div>
-      <p class="tiny muted" style="margin:6px 0 14px">Blue: mean of the 5 folds. Thin grey lines: individual folds.</p>
+      <p class="tiny muted" style="margin:6px 0 14px" id="curveNote"></p>
       <div id="lossChart"></div>
       <details class="more"><summary>Show as a table</summary><table class="data" id="curveTable"></table></details>
     </div>
@@ -73,7 +74,25 @@
 </section>
 
 <section class="block" style="padding-top:12px">
-  <div class="container">
+  <div class="container grid" style="gap:20px">
+    <div class="card chart-card reveal" id="compareCard" style="display:none">
+      <h3>Comparing the models</h3>
+      <p class="sub">A 3D ResNet trained from scratch, a 2.5D multi-view CNN built on an ImageNet-pretrained ResNet18, and their ensemble (averaged probabilities).
+        All are measured on the same held-out patients.</p>
+      <div style="overflow-x:auto"><table class="data" id="compareTable"></table></div>
+    </div>
+    <div class="card chart-card reveal" id="dxCard" style="display:none">
+      <h3>Tested against real diagnoses</h3>
+      <p class="sub">For <b id="dxN"></b> LIDC patients, the diagnosis was confirmed: <span id="dxBreak"></span> (methods: <span id="dxMethods"></span>).
+        This checks whether the model predicts actual cancer, not just radiologists' opinions. Each patient is scored by their most suspicious nodule.</p>
+      <div class="grid c2" style="margin-top:6px">
+        <div class="stat" style="padding:4px 0"><div class="v grad-text" id="dxModel">–</div><div class="l">AI model AUC · <span id="dxModelCi"></span></div></div>
+        <div class="stat" style="padding:4px 0"><div class="v" id="dxRad">–</div><div class="l">Radiologists' ratings AUC · <span id="dxRadCi"></span></div></div>
+      </div>
+      <p class="small text-2" style="margin:14px 0 0">Predicting the true diagnosis is much harder than predicting radiologists' ratings. The model learned from those ratings,
+        and many of these patients had cancer that had spread from elsewhere. The radiologists also saw the whole scan and its context. With only a small number of patients
+        the confidence intervals are wide. This is the most honest measure on this page.</p>
+    </div>
     <div class="card chart-card reveal">
       <h3>Results per fold</h3>
       <p class="sub">Each fold's model is tested on a different fifth of the patients; the spread shows how stable the results are.</p>
@@ -84,8 +103,10 @@
 
 <section class="block">
   <div class="container">
-    <div class="section-head reveal"><span class="eyebrow">Architecture</span><h2>A 3D ResNet with 8.3 million parameters</h2>
-      <p>The network reads the nodule as a true 3D volume, so it can learn its shape in every direction, not just one slice.</p></div>
+    <div class="section-head reveal"><span class="eyebrow">Architecture</span><h2>Two different networks, one ensemble</h2>
+      <p><b>3D ResNet</b> (8.3 M parameters, trained from scratch) reads the nodule as a true 3D volume, shown below.
+        <b>2.5D multi-view CNN</b> (11.2 M parameters) cuts 9 planes through the nodule (3 orthogonal, 6 diagonal), passes each through an
+        ImageNet-pretrained ResNet18, and pools what it sees. Because they look at nodules differently, their mistakes differ, and averaging them helps.</p></div>
     <div class="arch reveal">
       <div><b>Input</b>48×48×48 mm cube, 1 mm voxels</div>
       <div><b>Stem</b>3D conv, 32 filters</div>
@@ -111,7 +132,8 @@
           <dt>Augmentation</dt><dd>Random 3D crops, flips and 90° rotations</dd>
           <dt>Optimisation</dt><dd>AdamW, cosine learning-rate schedule, 60 epochs, class-balanced loss, mixed precision</dd>
           <dt>Hardware</dt><dd>One laptop GPU (RTX 4050, 6 GB): about 20 minutes per fold</dd>
-          <dt>Explainability</dt><dd>Grad-CAM heatmaps averaged over the 5 models</dd>
+          <dt>Explainability</dt><dd>Grad-CAM heatmaps averaged over the 3D models</dd>
+          <dt>Detection</dt><dd>MONAI's RetinaNet trained on LUNA16 finds nodule candidates across the whole scan</dd>
         </dl>
       </div>
     </div>
@@ -124,7 +146,7 @@
     <div class="grid c2">
       <div class="card feature reveal"><h3>Labels are opinions, not biopsies</h3><p>The model learned to predict what radiologists would think about a nodule, not confirmed diagnoses. Its ceiling is their agreement with each other.</p></div>
       <div class="card feature reveal"><h3>One dataset, one era</h3><p>LIDC-IDRI scans come from a few US institutions in the 2000s. Scanners, protocols and populations elsewhere differ, and performance may drop there.</p></div>
-      <div class="card feature reveal"><h3>You point, it classifies</h3><p>It does not search the scan for nodules. A missed nodule gets no score, and a click on something that is not a nodule still gets one.</p></div>
+      <div class="card feature reveal"><h3>Detection can miss things</h3><p>The automatic detector finds most nodules but not all, and sometimes flags other structures. A missed nodule gets no score, and anything you click still gets one.</p></div>
       <div class="card feature reveal"><h3>No history, no growth</h3><p>Doctors use growth over time, symptoms, smoking history and other tests. The model sees one 48 mm cube from one scan.</p></div>
     </div>
     <div class="alert reveal" style="margin-top:22px"><span id="limWarn"></span>

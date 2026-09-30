@@ -55,8 +55,10 @@
   }
 
   const pct = (v) => (v * 100).toFixed(1) + "%";
+  fetch("/api/status").then((r) => r.json()).then((st) => { $("mModels").textContent = st.models; }).catch(() => {});
   fetch("/api/metrics").then((r) => (r.ok ? r.json() : Promise.reject(r))).then((M) => {
     const n = M.nodule_level, p = M.patient_level, d = M.dataset;
+    $("mName").textContent = M.name || "Model";
     $("mAuc").textContent = n.auc.toFixed(3);
     $("mAucCi").textContent = `95% CI ${n.auc_95ci[0].toFixed(3)}–${n.auc_95ci[1].toFixed(3)}`;
     $("mAcc").textContent = pct(n.accuracy);
@@ -81,33 +83,63 @@
         `<div><span class="sw" style="background:${se[i].color}"></span>${i ? "Patient" : "Nodule"}: detects ${pct(pt[1])} at threshold ${pt[2].toFixed(2)}</div>`).join(""),
     });
 
-    // learning curves
-    const H = M.history, ep = H.epochs;
+    // learning curves: one line per trained model (mean of its 5 folds)
+    const HS = M.history;
+    const ep = HS[0].epochs;
     const zip = (ys) => ep.map((e, i) => [e, ys[i]]);
     const epTicks = [1, ...ep.filter((e) => e % 10 === 0)];
+    const many = HS.length > 1;
+    const series = (key) => HS.map((h, i) => ({ name: h.name, color: SERIES[i % SERIES.length], pts: zip(h[key]) }));
+    const tipFor = (key, label) => (hits, se) => `<b>Epoch ${hits[0][0]}</b>` +
+      hits.map((pt, i) => `<div><span class="sw" style="background:${se[i].color}"></span>${se[i].name}: ${label} ${pt[1].toFixed(3)}</div>`).join("");
     const drawAuc = () => lineChart($("aucChart"), {
       label: "Validation AUC by epoch", height: 260, x: [1, ep.length], y: [0.5, 1], xTickValues: epTicks, yTickValues: [0.5, 0.6, 0.7, 0.8, 0.9, 1],
       fx: (v) => Math.round(v), fy: (v) => v.toFixed(1), xLabel: "Epoch", yLabel: "AUC on unseen patients",
-      context: H.auc_folds.map(zip), series: [{ name: "Mean", color: SERIES[0], pts: zip(H.auc_mean) }],
-      tip: (h) => { const i = h[0][0] - 1, f = H.auc_folds.map((a) => a[i]);
-        return `<b>Epoch ${h[0][0]}</b><div>Mean AUC ${h[0][1].toFixed(3)}</div><div class="muted">Folds ${Math.min(...f).toFixed(3)}–${Math.max(...f).toFixed(3)}</div>`; },
+      series: series("auc_mean"), tip: tipFor("auc_mean", "AUC"),
     });
-    const maxLoss = Math.ceil(Math.max(...H.loss_folds.flat()) * 5) / 5;
+    const maxLoss = Math.ceil(Math.max(...HS.flatMap((h) => h.loss_mean)) * 5) / 5;
     const lossTicks = Array.from({ length: Math.round(maxLoss / 0.2) + 1 }, (_, i) => +(i * 0.2).toFixed(1));
     const drawLoss = () => lineChart($("lossChart"), {
       label: "Training loss by epoch", height: 260, x: [1, ep.length], y: [0, maxLoss], xTickValues: epTicks, yTickValues: lossTicks,
       fx: (v) => Math.round(v), fy: (v) => v.toFixed(1), xLabel: "Epoch", yLabel: "Training loss",
-      context: H.loss_folds.map(zip), series: [{ name: "Mean", color: SERIES[0], pts: zip(H.loss_mean) }],
-      tip: (h) => `<b>Epoch ${h[0][0]}</b><div>Mean loss ${h[0][1].toFixed(3)}</div>`,
+      series: series("loss_mean"), tip: tipFor("loss_mean", "loss"),
     });
+    $("curveLegend").innerHTML = many ? HS.map((h, i) => `<span><i class="sw" style="background:${SERIES[i % SERIES.length]}"></i>${h.name}</span>`).join("") : "";
+    $("curveNote").textContent = many ? "Each line is the mean of that model's 5 folds." : "Mean of the 5 folds.";
     const drawAll = () => { drawRoc(); drawAuc(); drawLoss(); };
     drawAll();
     let t; window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(drawAll, 150); });
 
-    const peak = H.auc_mean.indexOf(Math.max(...H.auc_mean));
-    const last10 = H.auc_mean.slice(-10).reduce((a, b) => a + b, 0) / Math.min(10, H.auc_mean.length);
-    $("fitText").innerHTML = `Validation AUC rose steadily and peaked at epoch <b>${peak + 1}</b> of ${ep.length} (mean ${H.auc_mean[peak].toFixed(3)});
-      the last 10 epochs average <b>${last10.toFixed(3)}</b>. An overfitting model would peak early and then decline while its training loss kept falling.`;
+    $("fitText").innerHTML = HS.map((h) => {
+      const peak = h.auc_mean.indexOf(Math.max(...h.auc_mean));
+      const last10 = h.auc_mean.slice(-10).reduce((a, b) => a + b, 0) / Math.min(10, h.auc_mean.length);
+      return `<b>${h.name}</b>: validation AUC peaked at epoch ${peak + 1} (${h.auc_mean[peak].toFixed(3)}); last 10 epochs average ${last10.toFixed(3)}.`;
+    }).join("<br>") + "<br>An overfitting model would peak early and then fall while its training loss kept dropping.";
+
+    // model comparison
+    if (M.comparison) {
+      $("compareCard").style.display = "";
+      $("compareTable").innerHTML = `<tr><th>Model</th><th class="num">AUC (ratings)</th><th class="num">95% CI</th><th class="num">Accuracy</th>
+          <th class="num">Sensitivity</th><th class="num">Specificity</th><th class="num">Patient AUC</th><th class="num">AUC vs real diagnosis</th></tr>` +
+        M.comparison.map((r) => { const a = r.nodule_level;
+          return `<tr${r.name === "Ensemble" ? ' style="font-weight:700"' : ""}><td>${r.name}</td><td class="num">${a.auc.toFixed(3)}</td>
+            <td class="num">${a.auc_95ci.map((v) => v.toFixed(3)).join("–")}</td><td class="num">${pct(a.accuracy)}</td>
+            <td class="num">${pct(a.sensitivity)}</td><td class="num">${pct(a.specificity)}</td><td class="num">${r.patient_level.auc.toFixed(3)}</td>
+            <td class="num">${r.diagnosis_auc !== undefined ? r.diagnosis_auc.toFixed(3) : "–"}</td></tr>`; }).join("");
+    }
+
+    // real diagnoses
+    const D = M.diagnosis_metrics;
+    if (D) {
+      $("dxCard").style.display = "";
+      $("dxModel").textContent = D.model.auc.toFixed(2);
+      $("dxModelCi").textContent = `95% CI ${D.model.auc_95ci.map((v) => v.toFixed(2)).join("–")}`;
+      $("dxRad").textContent = D.radiologists.auc.toFixed(2);
+      $("dxRadCi").textContent = `95% CI ${D.radiologists.auc_95ci.map((v) => v.toFixed(2)).join("–")}`;
+      $("dxN").textContent = D.patients_scored;
+      $("dxBreak").textContent = Object.entries(D.diagnoses).map(([k, v]) => `${v} ${k}`).join(", ");
+      $("dxMethods").textContent = Object.entries(D.methods).map(([k, v]) => `${k} ${v}`).join(", ");
+    }
 
     // tables
     $("foldTable").innerHTML = `<tr><th>Fold</th><th class="num">AUC</th><th class="num">Accuracy</th><th class="num">Sensitivity</th><th class="num">Specificity</th><th class="num">Nodules</th></tr>` +
@@ -116,8 +148,9 @@
     $("rocTable").innerHTML = `<tr><th>Series</th><th class="num">AUC</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Malignant</th></tr>
       <tr><td>Nodule level</td><td class="num">${n.auc.toFixed(3)}</td><td class="num">${n.auc_95ci.map((v) => v.toFixed(3)).join("–")}</td><td class="num">${n.n}</td><td class="num">${n.n_positive}</td></tr>
       <tr><td>Patient level</td><td class="num">${p.auc.toFixed(3)}</td><td class="num">${p.auc_95ci.map((v) => v.toFixed(3)).join("–")}</td><td class="num">${p.n}</td><td class="num">${p.n_positive}</td></tr>`;
-    $("curveTable").innerHTML = `<tr><th>Epoch</th><th class="num">Mean val. AUC</th><th class="num">Mean train loss</th></tr>` +
-      ep.filter((e) => e === 1 || e % 5 === 0).map((e) => `<tr><td>${e}</td><td class="num">${H.auc_mean[e - 1].toFixed(3)}</td><td class="num">${H.loss_mean[e - 1].toFixed(3)}</td></tr>`).join("");
+    $("curveTable").innerHTML = `<tr><th>Epoch</th>${HS.map((h) => `<th class="num">${h.name} AUC</th><th class="num">${h.name} loss</th>`).join("")}</tr>` +
+      ep.filter((e) => e === 1 || e % 5 === 0).map((e) => `<tr><td>${e}</td>${HS.map((h) =>
+        `<td class="num">${h.auc_mean[e - 1].toFixed(3)}</td><td class="num">${h.loss_mean[e - 1].toFixed(3)}</td>`).join("")}</tr>`).join("");
   }).catch(() => {
     document.querySelectorAll(".needs-metrics").forEach((el) => (el.innerHTML = `<p class="muted">No evaluation results found yet. Train the models and run <span class="mono">cadc.evaluate</span>.</p>`));
   });

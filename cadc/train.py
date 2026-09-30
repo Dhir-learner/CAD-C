@@ -22,7 +22,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from cadc.data import NoduleDataset, assign_folds, load_nodules
-from cadc.model import ResNet3D
+from cadc.model import ARCHS, DEFAULT_LR, build_model
 
 
 def save_atomic(obj, path):
@@ -76,7 +76,8 @@ def main():
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--arch", choices=list(ARCHS), default="resnet3d")
+    parser.add_argument("--lr", type=float, default=None, help="default: 1e-3 for resnet3d, 3e-4 for multiview2d")
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--min-readers", type=int, default=1, help="drop nodules rated by fewer radiologists")
     parser.add_argument("--workers", type=int, default=2)
@@ -108,7 +109,8 @@ def main():
         num_workers=args.workers, pin_memory=amp, persistent_workers=args.workers > 0,
     )
 
-    model = ResNet3D().to(device)
+    args.lr = args.lr or DEFAULT_LR[args.arch]
+    model = build_model(args.arch).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
     scaler = torch.amp.GradScaler(device.type, enabled=amp)
@@ -139,14 +141,14 @@ def main():
 
         if m["auc"] > best_auc:
             best_auc = m["auc"]
-            save_atomic({"model": model.state_dict(), "epoch": epoch, "metrics": m}, out / "best.pt")
+            save_atomic({"model": model.state_dict(), "arch": args.arch, "epoch": epoch, "metrics": m}, out / "best.pt")
             table.iloc[va].assign(prob=probs).to_csv(out / "val_predictions.csv", index=False)
         if epoch == args.epochs - 1:
             # The final epoch is chosen without looking at validation scores, so these
             # predictions give an unbiased estimate; the best-epoch ones are optimistic.
-            save_atomic({"model": model.state_dict(), "epoch": epoch, "metrics": m}, out / "final.pt")
+            save_atomic({"model": model.state_dict(), "arch": args.arch, "epoch": epoch, "metrics": m}, out / "final.pt")
             table.iloc[va].assign(prob=probs).to_csv(out / "val_predictions_final.csv", index=False)
-        save_atomic({"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
+        save_atomic({"model": model.state_dict(), "arch": args.arch, "opt": opt.state_dict(), "sched": sched.state_dict(),
                      "scaler": scaler.state_dict(), "epoch": epoch, "best_auc": best_auc}, last)
 
         new_file = not history.exists()

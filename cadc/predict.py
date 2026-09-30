@@ -22,7 +22,7 @@ import pydicom
 import torch
 
 from cadc.data import NoduleDataset
-from cadc.model import ResNet3D
+from cadc.model import build_model
 from cadc.preprocess import extract_patch
 
 
@@ -32,8 +32,9 @@ def load_models(run, which, device):
         raise SystemExit(f"no fold*/{which}.pt in {run}")
     models = []
     for p in paths:
-        m = ResNet3D().to(device)
-        m.load_state_dict(torch.load(p, map_location=device)["model"])
+        ckpt = torch.load(p, map_location=device)
+        m = build_model(ckpt.get("arch", "resnet3d"), pretrained=False).to(device)
+        m.load_state_dict(ckpt["model"])
         models.append(m.eval())
     return models
 

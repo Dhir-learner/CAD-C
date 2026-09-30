@@ -1,5 +1,8 @@
-# Extra packages for the web app (app/server.py), on top of requirements.txt and torch.
+# Extra packages for the web app (app/server.py), on top of requirements.txt, torch and torchvision.
 fastapi
 uvicorn[standard]
 python-multipart
 pillow
+# optional: automatic nodule detection (cadc/detect.py)
+monai[itk]
+huggingface_hub

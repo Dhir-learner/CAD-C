@@ -8,9 +8,12 @@ import argparse
 import base64
 import io
 import json
+import socket
 import tempfile
 import threading
+import time
 import uuid
+import webbrowser
 import zipfile
 from collections import OrderedDict
 from pathlib import Path
@@ -311,6 +314,18 @@ def predict(scan_id: str, p: Point):
     )
 
 
+def open_when_ready(host, port, url, timeout=60):
+    """Open the browser only once the server accepts connections, so the page loads completely."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                webbrowser.open(url)
+                return
+        except OSError:
+            time.sleep(0.3)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run", type=Path, default=ROOT / "runs" / "baseline", help="training run with fold*/ checkpoints")
@@ -319,6 +334,7 @@ def main():
                         help="preprocessed shards, used to show LIDC radiologist annotations")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--no-browser", action="store_true", help="don't open a browser tab")
     args = parser.parse_args()
 
     state["device"] = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -329,7 +345,10 @@ def main():
         print(f"WARNING: {e}. The app will open, but cannot analyse nodules until models exist.")
     state["lidc"] = index_lidc_annotations(args.patches)
     print(f"{len(state['models'])} models on {state['device']}, {len(state['lidc'])} LIDC scans indexed")
-    print(f"Open http://{args.host}:{args.port} in your browser")
+    url = f"http://{args.host}:{args.port}"
+    print(f"Open {url} in your browser (keep this window open while using the app)")
+    if not args.no_browser:
+        threading.Thread(target=open_when_ready, args=(args.host, args.port, url), daemon=True).start()
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 

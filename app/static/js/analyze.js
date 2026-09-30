@@ -31,6 +31,13 @@
   ["dragleave", "drop"].forEach((e) => drop.addEventListener(e, (ev) => { ev.preventDefault(); drop.classList.remove("over"); }));
   drop.addEventListener("drop", (ev) => upload(ev.dataTransfer.files));
   $("fileInput").addEventListener("change", (ev) => upload(ev.target.files));
+  // "Choose files", or a click / Enter anywhere on the box except the sample button, opens the file picker.
+  const pick = () => { if (!CADC.consented) return; $("fileInput").click(); };
+  $("chooseBtn").addEventListener("click", (ev) => { ev.stopPropagation(); pick(); });
+  drop.addEventListener("click", (ev) => { if (!ev.target.closest("#demoBtn")) pick(); });
+  drop.addEventListener("keydown", (ev) => {
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target === drop) { ev.preventDefault(); pick(); }
+  });
   $("demoBtn").addEventListener("click", async (ev) => {
     ev.preventDefault(); ev.stopPropagation();
     loading(true, "Fetching the sample scan (LIDC-IDRI-0001)… the first time takes about 30 s");

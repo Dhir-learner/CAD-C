@@ -168,7 +168,7 @@ This takes a few hours at home; on Colab it took about 2 hours (see below). If y
 
 For the real-diagnosis test, also download the diagnosis spreadsheet:
 ```
-curl -L -o data\meta\diagnosis.xls https://www.cancerimagingarchive.net/wp-content/uploads/tcia-diagnosis-data-2012-04-20.xls
+curl -L --create-dirs -o data\meta\diagnosis.xls https://www.cancerimagingarchive.net/wp-content/uploads/tcia-diagnosis-data-2012-04-20.xls
 ```
 
 **3. Train and evaluate everything**

@@ -192,7 +192,21 @@ GROQ_API_KEY=your-key-here
 ```
 `.env` is git-ignored. **Never commit the key**; this repository is public.
 
-**6. Run the web app.** Double-click **`run_app.bat`**. The browser opens at http://127.0.0.1:8000 once the models are loaded. Keep the black window open while you use it.
+**6. Get CT scans to try.** The app needs a chest CT in DICOM format. This downloads three free public scans
+that the models **never saw in training** (about 210 MB), saved as `.zip` files ready to upload:
+```
+.venv\Scripts\python -m cadc.get_samples
+```
+They are saved in `data\samples\`:
+- `CT-Training-LC001.zip`: confirmed lung cancer (SPIE-AAPM Lung CT Challenge).
+- `CT-Training-BE002.zip`: confirmed benign (same challenge).
+- `R_004.zip`: adenocarcinoma (LungCT-Diagnosis).
+
+In the LUNGx challenge the patient ID gives the answer: `LC` = cancer, `BE` = benign.
+See more with `--list "SPIE-AAPM Lung CT Challenge"` and fetch others with `--collection ... --patients ...`.
+The app's **Try a sample scan** button loads LIDC-IDRI-0001 instead, which was in the training data.
+
+**7. Run the web app.** Double-click **`run_app.bat`**. The browser opens at http://127.0.0.1:8000 once the models are loaded. Keep the black window open while you use it.
 
 ---
 
@@ -223,6 +237,7 @@ This project's preprocessing was run on Colab and driven from Claude Code throug
 | `python -m cadc.evaluate --run RUN [--which final\|best]` | Pool the folds: AUC with CI, accuracy, sensitivity, specificity, ROC → `metrics.json`, `roc.png`. |
 | `python -m cadc.ensemble --runs RUN1 RUN2 --out DIR` | Average runs' out-of-fold predictions and compare → `comparison.json`. |
 | `python -m cadc.diagnosis_eval --runs RUN... --data DIR --diagnosis XLS` | Test against confirmed diagnoses next to the radiologists' ratings. |
+| `python -m cadc.get_samples [--list COLLECTION]` | Download public test CT scans (not used in training) as ready-to-upload `.zip` files. |
 | `python -m cadc.predict --run RUN --shard FILE.npz` | Score the nodules of a preprocessed scan. |
 | `python -m cadc.predict --run RUN --dicom DIR --center X Y SLICE` | Score a nodule in a new CT scan (column, row, slice from the bottom; 0-based). |
 | `python -m app.server [--run RUN...] [--port 8000] [--no-browser]` | Start the web app (`run_app.bat` does this). |
@@ -243,7 +258,8 @@ CAD-C/
 │   ├── ensemble.py            # combine runs, compare models
 │   ├── diagnosis_eval.py      # test against confirmed diagnoses
 │   ├── detect.py              # MONAI RetinaNet nodule detection
-│   └── predict.py             # score nodules from a shard or DICOM folder
+│   ├── predict.py             # score nodules from a shard or DICOM folder
+│   └── get_samples.py         # download public test scans (LUNGx, LungCT-Diagnosis)
 ├── app/                       # the web app
 │   ├── server.py              # FastAPI: pages, upload, predict, Grad-CAM, detect, metrics, chat
 │   ├── chat.py                # Groq assistant: safety prompt, real results, streaming
@@ -260,6 +276,7 @@ Not in git (large or private):
 ├── data/patches/              # 1,018 .npz shards (~0.9 GB)
 ├── data/meta/diagnosis.xls    # LIDC confirmed diagnoses
 ├── data/bundles/              # MONAI detection bundle (~160 MB)
+├── data/samples/              # test scans from get_samples (.zip)
 ├── runs/                      # checkpoints and results: baseline/, multiview/, ensemble/
 └── .env                       # GROQ_API_KEY
 ```

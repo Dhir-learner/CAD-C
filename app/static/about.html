@@ -77,6 +77,11 @@
           and it is sometimes drawn to surrounding structures rather than the nodule itself.</p></details>
       <details><summary>Why do I have to click on the nodule myself?</summary>
         <p>This model classifies nodules; it does not search for them. Finding nodules automatically needs a separate detection model, which is a possible next step for this project.</p></details>
+      <details><summary>I don't have a CT scan. Where can I get one to try?</summary>
+        <p>Click <b>Try a sample scan</b> on the Analyse page for a quick demo (that scan was in the training data). For scans the model has
+          <b>never seen</b>, run <span class="mono">python -m cadc.get_samples</span> in the project folder. It downloads three free public scans
+          from The Cancer Imaging Archive (one confirmed lung cancer, one confirmed benign, one adenocarcinoma) as .zip files in
+          <span class="mono">data\samples</span>, ready to upload.</p></details>
       <details><summary>What kind of scan can I upload?</summary>
         <p>A chest CT scan in DICOM format: a .zip of one series, or all the .dcm files of that series. Thin slices (1–2.5 mm) work best. X-rays, MRI, photos and PDFs will not work.</p></details>
       <details><summary>Why does it say my LIDC-IDRI scan is in the training data?</summary>

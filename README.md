@@ -178,6 +178,24 @@ uv pip install -r requirements-app.txt
 
 It takes about 30 seconds per scan on the laptop GPU. Without the bundle the app still works; the button is hidden.
 
+## AI chat assistant
+
+Every page of the web app has an **Ask CADC AI** button: a chat assistant (via the [Groq API](https://console.groq.com),
+model `openai/gpt-oss-120b`) that explains lung nodules, lung cancer, the model's results and how to use the app. On the
+Analyse page it knows your latest result, so you can ask *"What does my result mean?"*.
+
+It is instructed never to diagnose, to always point people to a doctor, and to put emergency advice first when someone
+describes emergency symptoms. Chat messages are sent to Groq to generate replies (scans are not).
+
+**Setup:** create a file named `.env` in the CADC folder containing your key:
+
+```
+GROQ_API_KEY=your-key-here
+```
+
+`.env` is in `.gitignore`, so the key never goes to GitHub. **Never put the key in code**; this repository is public.
+Optionally add `GROQ_MODEL=...` to use a different Groq model. Without a key the app works, and the chat button shows it isn't configured.
+
 ## Web app
 
 A local website with five pages. It runs on your PC with the trained models in `runsaseline`.
@@ -238,7 +256,8 @@ Options: `run_app.bat --run runs\other_run --port 8080`.
 | `cadc/evaluate.py` | Pools the 5 folds' predictions and reports AUC with a 95% confidence interval, accuracy, sensitivity, specificity, nodule and patient level, plus a ROC curve. |
 | `cadc/predict.py` | Averages the 5 models' scores on nodules from a shard or a new DICOM scan. |
 | `notebooks/colab_launcher.ipynb` | The Colab notebook used above. |
-| `app/server.py` | Web app backend (FastAPI): pages, scan upload, predictions, Grad-CAM, metrics API. |
+| `app/server.py` | Web app backend (FastAPI): pages, scan upload, predictions, Grad-CAM, detection, metrics and chat APIs. |
+| `app/chat.py` | The AI assistant: system prompt with safety rules and real results, streaming calls to Groq. |
 | `app/static/` | Web app frontend: 5 pages, shared CSS/JS, the Three.js 3D lung model (`js/lungs3d.js`), charts (`js/model.js`). |
 | `train_local.bat`, `run_app.bat` | One-click training and web app on Windows. |
 

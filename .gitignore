@@ -8,3 +8,6 @@ data/
 runs/
 *.npz
 *.pt
+
+# Secrets (API keys) stay on this machine.
+.env

@@ -25,12 +25,13 @@ import torch
 import torch.nn.functional as F
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel
 from sklearn.metrics import roc_curve
 
+from app import chat as assistant
 from cadc.data import NoduleDataset
 from cadc.detect import detect as detect_nodules_in
 from cadc.detect import load_detector
@@ -253,7 +254,8 @@ def metrics():
 def status():
     return dict(models=len(state["models"]), device=str(state["device"]),
                 runs=[RUN_NAMES.get(Path(r).name, Path(r).name) for r in state["runs"]],
-                detector=state["bundle"] is not None, lidc_scans_indexed=len(state["lidc"]))
+                detector=state["bundle"] is not None, chat=bool(assistant.api_key()),
+                lidc_scans_indexed=len(state["lidc"]))
 
 
 @app.post("/api/upload")
@@ -353,6 +355,23 @@ def detect_nodules(scan_id: str, min_score: float = 0.3, limit: int = 15):
     return dict(candidates=scan["candidates"], in_training_data=scan["uid"] in state["lidc"])
 
 
+class ChatRequest(BaseModel):
+    messages: list
+    context: dict | None = None
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest):
+    """Stream the assistant's reply as plain text."""
+    if not assistant.api_key():
+        raise HTTPException(503, "The chat assistant is not configured: add GROQ_API_KEY to the .env file.")
+    messages = assistant.clean_messages(req.messages)
+    if not messages or messages[-1]["role"] != "user":
+        raise HTTPException(400, "Send a question.")
+    return StreamingResponse(assistant.stream_reply(messages, req.context, state["metrics_run"]),
+                             media_type="text/plain; charset=utf-8", headers={"Cache-Control": "no-store"})
+
+
 def open_when_ready(host, port, url, timeout=60):
     """Open the browser only once the server accepts connections, so the page loads completely."""
     deadline = time.time() + timeout
@@ -381,6 +400,7 @@ def main():
     parser.add_argument("--no-browser", action="store_true", help="don't open a browser tab")
     args = parser.parse_args()
 
+    assistant.load_env(ROOT / ".env")
     state["device"] = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     runs = args.run or [r for r in (ROOT / "runs" / "baseline", ROOT / "runs" / "multiview") if r.exists()]
     for r in runs:
@@ -402,7 +422,8 @@ def main():
         print("Nodule detector not installed; automatic detection is disabled (see README).")
     state["lidc"] = index_lidc_annotations(args.patches)
     print(f"{len(state['models'])} models from {len(state['runs'])} run(s) on {state['device']}, "
-          f"{len(state['lidc'])} LIDC scans indexed, detector {'on' if state['bundle'] else 'off'}")
+          f"{len(state['lidc'])} LIDC scans indexed, detector {'on' if state['bundle'] else 'off'}, "
+          f"chat assistant {'on' if assistant.api_key() else 'off (no GROQ_API_KEY)'}")
     url = f"http://{args.host}:{args.port}"
     print(f"Open {url} in your browser (keep this window open while using the app)")
     if not args.no_browser:

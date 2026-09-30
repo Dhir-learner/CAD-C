@@ -160,6 +160,7 @@
     try {
       const r = await api(`/api/scan/${S.scan.scan_id}/detect`, { method: "POST" });
       S.cands = r.candidates;
+      CADC.context = Object.assign(CADC.context || {}, { candidates: S.cands.length });
       $("detectHint").textContent = S.cands.length
         ? `${S.cands.length} candidate${S.cands.length > 1 ? "s" : ""} found. Click one to analyse it in detail. Rings on the slices show where they are.`
         : "No nodules found above the detector's threshold. You can still click on a spot to analyse it.";
@@ -214,6 +215,9 @@
     $("verdict").textContent = `${band[0].toUpperCase() + band.slice(1)} suspicion`;
     $("verdict").className = "verdict " + { low: "benign", intermediate: "warn", high: "malignant" }[band];
     const agree = r.per_model.filter((v) => (v >= 0.5) === mal).length;
+    CADC.context = Object.assign(CADC.context || {}, {
+      result: { probability: r.probability, agree, models: r.per_model.length, in_training_data: r.in_training_data },
+    });
     $("verdictText").innerHTML = `${agree} of ${r.per_model.length} models agree. ${BAND_TEXT[band]}`;
     $("bandMark").style.left = "0%";
     requestAnimationFrame(() => requestAnimationFrame(() => { $("bandMark").style.left = (r.probability * 100).toFixed(1) + "%"; }));
@@ -254,6 +258,7 @@
   }
 
   // ---------- printable report ----------
+  $("askBtn").onclick = () => CADC.openChat && CADC.openChat("What does my result mean?");
   $("reportBtn").onclick = () => {
     const r = S.last; if (!r) return;
     const w = window.open("", "_blank");
